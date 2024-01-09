@@ -1,0 +1,2235 @@
+---
+title: "generating_figures_keener"
+author: "Rebecca Keener"
+date: "2024-01-08"
+output: html_document
+---
+
+All dependent files are available in the uploaded data.
+Please adjust your definition of dep_dir based on the location of these downloaded files.
+Also adjust your definition of out_dir based on where you want the plots to be written to.
+```{r}
+dep_dir<-"/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/Keener_meta-analysis_dataupload_202401/generating_figures/dependent_files/"
+out_dir<-paste("/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/Keener_meta-analysis_dataupload_202401/generating_figures/panels/")
+```
+
+Figure 1: Manhattan plot
+```{r}
+library(data.table)
+library(ggplot2)
+library(dplyr)
+
+data<-fread(paste(dep_dir, "no_sb_chr_pos.txt", sep=""))
+data<-subset(data, data$pvalue < 0.1)
+
+#remove single SNPs that are genome-wide significant
+qc<-fread(paste(dep_dir, "/single_snp_tobeexcluded.csv", sep=""))
+data<-subset(data, !(data$chrpos %in% qc$chrpos))
+ 
+#dplyr code requires dataset to be called data
+data<-subset(data, data$chr %in% c(1:22, "X"))
+data$chr<-sub("X", 23, data$chr)
+data$chr<-as.numeric(data$chr)
+data$pos<-as.numeric(data$pos)
+#dplyr code requires chromosome column be called CHR
+colnames(data)[2]<-"CHR"
+#dplyr code requires position column be called BP
+colnames(data)[3]<-"BP"
+#dplyr code requires p-value column be called P
+colnames(data)[12]<-"P"
+
+t <- data %>% group_by(CHR) %>% summarise(chr_len=max(BP)) %>% mutate(tot=cumsum(chr_len)-chr_len) %>% dplyr::select(-chr_len) %>% left_join(data, ., by=c("CHR"="CHR")) %>% arrange(CHR, BP) %>% mutate( BPcum=BP+tot)
+
+rm(data)
+
+#add novel loci in color
+n<-fread(paste(dep_dir, "sentinels_novelty.txt", sep=""))
+n<-subset(n, n$novel=="novel")
+
+i<-0
+for (snp in n$rs_number){
+  i<-i+1
+  s<-n[rs_number==snp,]
+  d<-subset(t, t$CHR==s$chr & t$BP > (s$pos-150000) & t$BP < (s$pos+150000))
+  if (i==1){
+    novel<-d
+  }else{
+    novel<-rbind(novel,d)
+  }
+}
+
+axisdf = t %>% group_by(CHR) %>% summarize(center=( max(BPcum) + min(BPcum) ) / 2 )
+
+ggplot(t, aes(x=BPcum, y=-log10(P))) + 
+  geom_point(aes(color=as.factor(CHR)), alpha=0.8, size=1) +
+  scale_color_manual(values = c(rep(c("grey10", "grey60"), 11 ), "grey10")) +
+  scale_x_continuous(name="Position on Chromosome", label = axisdf$CHR, breaks= axisdf$center ) +
+  scale_y_continuous(name="-log10(P-value)") +
+  theme(legend.position="none", panel.grid.major.x = element_blank(), panel.background = element_rect(fill="white")) +
+  geom_hline(yintercept=-log10(5e-5), color="blue") +
+  geom_hline(yintercept=-log10(5e-8), color="red") +
+  ggtitle("TL Meta-analysis Manhattan Plot") +
+  geom_point(data=novel, color="blue")
+ggsave("manplot_novel_blue.png", device="png", path=out_dir, width=13, height=7, units="in")
+```
+
+Figure 1: pie chart
+Generated in Excel, numbers can be found in Supplementary Table 1.
+
+Supplementary Figure 1: rs3008267 effect size across cohorts
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "replicated_snps.csv", sep=""))
+
+snp="8_257819"
+rsid="rs3008267"
+data2<-subset(data, data$chrpos==snp)
+#for formatting purposes, change "meta-analysis" to "Meta-analysis"
+data2[which(dataset=="meta-analysis"),5]<-"Meta-analysis"
+
+#the UKBB GWAS had the alleles flipped, so multiply the beta by -1
+data2[which(dataset=="Codd et al"),2]<-data2[which(dataset=="Codd et al"),2]*-1
+
+#calculate bounds of beta CI
+data2$CI_lower<-data2$beta - (1.96*data2$se)
+data2$CI_upper<-data2$beta + (1.96*data2$se)
+
+#make the dataset column a factor to enforce the order in the plot
+data2$dataset<-factor(data2$dataset, levels = c("Taub et al Hispanic/Latino", "Taub et al Asian", "Taub et al African", "Taub et al European", "Delgado et al", "Dorajoo et al", "Li et al", "Meta-analysis", "Codd et al"))
+
+ggplot(data2, aes(y=dataset, x=beta, xmin=CI_lower, xmax=CI_upper)) +
+    geom_point(aes(size=se)) +
+    geom_errorbar() +
+    xlab("Effect size estimate with 95% CI") +
+    geom_vline(xintercept=0, color="black", alpha=0.5, linetype="dashed") +
+    ggtitle(paste(rsid, " effect size across cohorts", sep="")) +
+    theme(legend.position = "none", text=element_text(size=10))
+ggsave(paste("replication_forestplot_", rsid, ".png", sep=""), device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Supplementary Figure 1: rs7923385 effect size across cohorts
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "replicated_snps.csv", sep=""))
+
+snp="10_97357340"
+rsid="rs7923385"
+data2<-subset(data, data$chrpos==snp)
+#for formatting purposes, change "meta-analysis" to "Meta-analysis"
+data2[which(dataset=="meta-analysis"),5]<-"Meta-analysis"
+
+#the UKBB GWAS had the alleles flipped, so multiply the beta by -1
+data2[which(dataset=="Codd et al"),2]<-data2[which(dataset=="Codd et al"),2]*-1
+
+#calculate bounds of beta CI
+data2$CI_lower<-data2$beta - (1.96*data2$se)
+data2$CI_upper<-data2$beta + (1.96*data2$se)
+
+#make the dataset column a factor to enforce the order in the plot
+data2$dataset<-factor(data2$dataset, levels = c("Taub et al Hispanic/Latino", "Taub et al Asian", "Taub et al African", "Taub et al European", "Delgado et al", "Dorajoo et al", "Li et al", "Meta-analysis", "Codd et al"))
+
+ggplot(data2, aes(y=dataset, x=beta, xmin=CI_lower, xmax=CI_upper)) +
+    geom_point(aes(size=se)) +
+    geom_errorbar() +
+    xlab("Effect size estimate with 95% CI") +
+    geom_vline(xintercept=0, color="black", alpha=0.5, linetype="dashed") +
+    ggtitle(paste(rsid, " effect size across cohorts", sep="")) +
+    theme(legend.position = "none", text=element_text(size=10))
+ggsave(paste("replication_forestplot_", rsid, ".png", sep=""), device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Figure 2A: Colocalization results across datasets for each meta-analysis signal
+```{r}
+library(data.table)
+library(ggplot2)
+library(biomaRt)
+
+#read in results
+#gtex eqtl
+ge<-fread(paste(dep_dir, "gtex_eqtl_coloc.csv", sep=""),header=T)
+ge<-subset(ge, ge$PPH4 > 0.7)
+colnames(ge)[2]<-"gene.version"
+ge[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+#keep rsid, gene, tissue
+ge<-ge[,c(1,9,3)]
+ge$dataset<-rep("GTEx_eQTL", nrow(ge))
+
+#gtex sqtl
+gs<-fread(paste(dep_dir, "gtex_sqtl_coloc.csv", sep=""))
+gs<-subset(gs, gs$PPH4 > 0.7)
+colnames(gs)[2]<-"cluster"
+gs[,c("chr", "start", "end", "clu", "gene.version"):=tstrsplit(cluster, ":", fixed=T)]
+gs[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+#keep rsid, gene, tissue
+gs<-gs[,c(1,14,3)]
+gs$dataset<-rep("GTEx_sQTL", nrow(gs))
+
+#DICE
+dice<-fread(paste(dep_dir, "dice_coloc.csv", sep=""))
+dice<-subset(dice, dice$PPH4 > 0.5)
+colnames(dice)[3]<-"tissue"
+colnames(dice)[2]<-"gene.version"
+dice[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+#keep rsid, gene, tissue
+dice<-dice[,c(1,9,3)]
+dice$dataset<-rep("DICE", nrow(dice))
+
+#eQTLGen
+gen<-fread(paste(dep_dir, "eqtlgen_coloc.csv", sep=""))
+gen<-subset(gen, gen$PPH4 > 0.7)
+#keep rsid, gene
+gen<-gen[,c(1,2)]
+gen$tissue<-rep("Whole_Blood", nrow(gen))
+gen$dataset<-rep("eQTLGen", nrow(gen))
+
+
+data<-do.call("rbind", list(ge, gs, dice, gen))
+
+#need to count for each sentinel the number of genes for each dataset
+i<-0
+sentinel<-vector()
+dataset<-vector()
+count<-vector()
+for (snp in unique(data$rsid)){
+  df<-subset(data, data$rsid==snp)
+  for (d in unique(data$dataset)){
+    i<-i+1
+    df2<-subset(df, df$dataset==d)
+    sentinel[[i]]<-snp
+    dataset[[i]]<-d
+    count[[i]]<-nrow(df2)
+  }
+}
+
+df<-data.frame(sentinel, dataset, count)
+
+#get chromosome arms to add to x-axis labels
+arms<-data.frame(
+  chrpos=c("1_113917053","1_151398465", "10_103900944", "11_108294680", "12_120533371", "12_123001735", "13_41150640", "14_65075759","14_95714358", "15_50073451", "16_68043168", "16_69362682", "16_70392835", "16_74630845", "16_82173937", "17_78187152", "17_8236454", "18_661917", "19_22032639", "2_209808365", "2_54251468", "20_63678039", "22_16973188", "22_50543007", "4_163127047", "4_9993632", "6_30796116", "6_31804139", "7_124791668", "7_128949373", "8_257819", "8_94566198", "9_34077464", "X_66015290"),
+  chr_arm=c("chr1_p13.2","chr1_q21.3", "chr10_q24.33", "chr11_q22.3", "chr12_q24.31", "chr12_q24.31", "chr13_q14.11", "chr14_q23.3","chr14_q32.13", "chr15_q21.2", "chr16_q22.1", "chr16_q22.1", "chr16_q22.1", "chr16_23.1", "chr16_q23.3", "chr17_q25.3", "chr17_p13.1", "chr18_p11.32", "chr19_p12", "chr2_q34", "chr2_p16.2", "chr20_q13.33", "chr22_q11.1", "chr22_q13.33", "chr4_q32.2", "chr4_p16.1", "chr6_p21.33", "chr6_p21.33", "chr7_q31.33", "chr7_q32.1", "chr8_p23.3", "chr8_q22.1", "chr9_p13.3", "chrX_q12")
+)
+sent<-fread(paste(dep_dir, "sentinels.csv", sep=""))
+s<-sent[,c(1,2)]
+colnames(s)<-c("sentinel", "chrpos")
+arms<-merge(arms, s, by="chrpos")
+
+df2<-merge(df, arms, by="sentinel")
+df2$id<-paste(df2$sentinel, df2$chr_arm, sep="  ")
+
+#force plotting order of decreasing count on GTEx eQTL colocalization
+o<-subset(df2, df2$dataset=="GTEx_eQTL")
+o<-o[order(-o$count),]
+df2$id<-factor(df2$id, levels = o$id)
+
+#force order of datasets
+df2$dataset<-factor(df2$dataset, levels = c("GTEx_eQTL", "GTEx_sQTL", "DICE", "eQTLGen"))
+
+#stacked bar plot
+ggplot(df2, aes(x=id, y=count, fill=dataset)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) +
+  xlab("Lead SNP") +
+  ylab("Frequency of colocalization") 
+ggsave("colocalization_sentinel_frequency_stackedbar_chr_arm.png", device="png", path=out_dir, height=5, width=9, units="in")
+```
+
+Figure 2B: Venn diagram showing the number of times a meta-analysis signal colocalized with a QTL in each dataset and overlap between datasets. (Overlap between datasets represents cases where a signal colocalized with any gene in each dataset)
+```{r}
+library(data.table)
+library(devtools)
+library(ggVennDiagram)
+library(ggplot2)
+
+#read in results
+#gtex eqtl
+ge<-fread(paste(dep_dir, "gtex_eqtl_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+ge<-subset(ge, ge$PPH4 > 0.7)
+
+#gtex sqtl
+gs<-fread(paste(dep_dir, "gtex_sqtl_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+gs<-subset(gs, gs$PPH4 > 0.7)
+
+#DICE
+dice<-fread(paste(dep_dir, "dice_coloc.csv", sep=""))
+#subset to PPH4 > 0.5
+dice<-subset(dice, dice$PPH4 > 0.5)
+
+#eQTLGen
+gen<-fread(paste(dep_dir, "eqtlgen_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+gen<-subset(gen, gen$PPH4 > 0.7)
+
+data <- list(
+  GTEx_eQTL = unique(ge$rsid),
+  GTEx_sQTL = unique(gs$rsid),
+  eQTLGen = unique(gen$rsid),
+  DICE = unique(dice$rsid)
+)
+
+ggVennDiagram(data, label_alpha= 0, label="count", edge_lty = "blank") +
+  ggplot2::scale_fill_gradient(low="white", high="red") +
+  scale_x_continuous(expand=expansion(mult=0.2))
+ggsave("colocalization_venn.png", device="png", width=8, height=5, units= "in", path=out_dir)
+```
+
+Figure 2C: Manhattan plots showing the meta-analysis signal led by rs10111287 and VIRMA eQTLs
+```{r}
+library(data.table)
+library(ggplot2)
+
+#identify shared x-axis limits
+meta<-fread(paste(dep_dir, "virma_meta_manplot.csv", sep=""))
+thyroid<-fread(paste(dep_dir, "virma_thyroid_eqtl.csv", sep=""))
+stomach<-fread(paste(dep_dir, "virma_stomach_eqtl.csv", sep=""))
+blood<-fread(paste(dep_dir, "virma_blood_eqtl.csv", sep=""))
+
+x1<-c(min(meta$pos), min(thyroid$pos), min(stomach$pos), min(blood$pos))
+x1<-max(x1)
+x2<-c(max(meta$pos), max(thyroid$pos), max(stomach$pos), max(blood$pos))
+x2<-min(x2)
+
+#meta-analysis plot
+meta<-subset(meta, meta$pos > x1 & meta$pos < x2)
+g1<-subset(meta, meta$pos==94566198)
+ggplot(meta, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("VIRMA primary signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("virma_manplot.png", device="png", path=out_dir)
+
+#Thyroid eQTL
+thyroid<-subset(thyroid, thyroid$pos > x1 & thyroid$pos < x2)
+thyroid$chr<-gsub("chr", "", thyroid$chr)
+thyroid$snpID<-paste(thyroid$chr, thyroid$pos, thyroid$ref, thyroid$alt, sep=":")
+ld<-meta[,c(1,21)]
+thyroid<-merge(thyroid, ld, by="snpID")
+g1<-subset(thyroid, thyroid$pos==94566198)
+ggplot(thyroid, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("VIRMA Thyroid eQTL signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("virma_thyroid_eqtl.png", device="png", path=out_dir)
+
+#Stomach eQTL
+stomach$chr<-gsub("chr", "", stomach$chr)
+stomach$snpID<-paste(stomach$chr, stomach$pos, stomach$ref, stomach$alt, sep=":")
+ld<-meta[,c(1,21)]
+stomach<-merge(stomach, ld, by="snpID")
+g1<-subset(stomach, stomach$pos==94566198)
+ggplot(stomach, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("VIRMA Stomach eQTL signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("virma_stomach_eqtl.png", device="png", path=out_dir)
+
+#whole blood eQTL
+blood$chr<-gsub("chr", "", blood$chr)
+blood$snpID<-paste(blood$chr, blood$pos, blood$ref, blood$alt, sep=":")
+ld<-meta[,c(1,21)]
+blood<-merge(blood, ld, by="snpID")
+g1<-subset(blood, blood$pos==94566198)
+ggplot(blood, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("VIRMA Blood eQTL signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("virma_blood_eqtl.png", device="png", path=out_dir)
+```
+
+Figure 2D: Manhattan plots showing the meta-analysis signal led by rs7193541 and RFWD3 sQTL
+For code to generate LeafCutter plot please see:
+https://github.com/BennyStrobes/leafcutter_sqtl_viz
+```{r}
+library(data.table)
+library(ggplot2)
+
+#identify shared x-axis limits
+meta<-fread(paste(dep_dir, "rfwd3_meta_manplot.csv", sep=""))
+fibro<-fread(paste(dep_dir, "rfwd3_fibroblasts_sqtl.csv", sep=""))
+fibro[,c("chr", "pos", "ref", "alt", "build"):=tstrsplit(variant_id, "_", fixed=T)]
+
+x1<-as.numeric(c(min(meta$pos), min(fibro$pos)))
+x1<-max(x1)
+x2<-as.numeric(c(max(meta$pos), max(fibro$pos)))
+x2<-min(x2)
+
+#meta-analysis plot
+meta<-subset(meta, meta$pos > x1 & meta$pos < x2)
+g1<-subset(meta, meta$pos==74630845)
+ggplot(meta, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("RFWD3 primary signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("rfwd3_manplot.png", device="png", path=out_dir, height=7, width=7, units="in")
+
+#fibroblasts sQTL
+fibro<-subset(fibro, fibro$pos > x1 & fibro$pos < x2)
+fibro$chr<-gsub("chr", "", fibro$chr)
+fibro$snpID<-paste(fibro$chr, fibro$pos, fibro$ref, fibro$alt, sep=":")
+ld<-meta[,c(1,21)]
+fibro<-merge(fibro, ld, by="snpID")
+g1<-subset(fibro, fibro$pos==74630845)
+g1<-g1[order(pval_nominal),]
+g1<-g1[1,]
+ggplot(fibro, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pval_nominal))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("RFWD3 fibroblasts sQTL signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("rfwd3_fibroblast_sqtl.png", device="png", path=out_dir, height=7, width=7, units="in")
+```
+
+Figure 2E: SuSiE credible set analysis for signal led by rs12637184
+```{r}
+library(data.table)
+library(ggplot2)
+
+meta<-fread(paste(dep_dir, "terc_meta_manplot.csv", sep=""))
+
+credset<-fread(paste(dep_dir, "3_169831986_new_credset.txt", sep=""))
+c1<-subset(meta, meta$snpID %in% subset(credset$snpID, credset$cs_num==1))
+c2<-subset(meta, meta$snpID %in% subset(credset$snpID, credset$cs_num==2))
+
+#subset region to improve clarity at signal
+meta<-subset(meta, meta$pos > 169600000 & meta$pos < 170000000)
+
+ggplot(meta, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome") +
+  geom_point(data=c1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, color="black",shape=23, size=3) +
+  geom_point(data=c2, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, color="black",shape=0, size=3) +
+  ggtitle("TERC 95% credible set") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("terc_credset.png", device="png", path=out_dir, height=7, width=7, units="in")
+```
+
+Supplementary Figure 2A: GTEx eQTL colocalization pie chart
+```{r}
+library(data.table)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(ggrepel)
+
+#eQTL results in GTEx
+
+qtl<-fread(paste(dep_dir, "gtex_eqtl_coloc.csv", sep=""))
+
+#subset to PPH4 > 0.7
+qtl<-subset(qtl, qtl$PPH4 > 0.7)
+
+#count # significant colocalization results for each signal
+#read in sentinels to get a total count of the number of signals in the meta-analysis 
+#get chrpos column for qtl dataframe
+sent<-fread(paste(dep_dir, "sentinels.csv", sep=""))
+s<-sent[,c(1,2)]
+colnames(s)[2]<-"chrpos"
+qtl<-merge(qtl, s, by="rsid")
+
+i<-0
+count<-vector()
+chrpos<-vector()
+for (snp in unique(qtl$chrpos)){
+  i<-i+1
+  d<-subset(qtl, qtl$chrpos==snp)
+  count[[i]]<-length(unique(d$tissue))
+  chrpos[[i]]<-snp
+}
+data<-data.frame(chrpos,count)
+
+#signals that had 0 colocalization results
+sent<-subset(sent, !(sent$rs_number %in% data$chrpos))
+
+count=c("0", "1", "2-5", ">5")
+n=c(length(unique(sent$rs_number)), nrow(subset(data, data$count==1)), nrow(subset(data, data$count > 1 & data$count < 5)), nrow(subset(data, data$count > 4)))
+percent=round((n/sum(n))*100, digits=0)
+
+d<-data.frame(count, n, percent)
+#make sure legend is in order we want
+d$count<-factor(levels = c("0", "1", "2-5", ">5"), d$count)
+
+#setup code to specify label positions
+df2 <- d %>% 
+  mutate(csum = rev(cumsum(rev(n))), 
+         pos = n/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), n/2, pos))
+
+ggplot(d, aes(x="", y=n, fill=count)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar(theta="y") +
+  theme_void() +
+  theme(legend.position="bottom", legend.key.size=unit(1,'cm'), legend.title = element_text(size=20), legend.text=element_text(size=20)) +
+  geom_label_repel(data = df2,
+                   aes(y = pos, label = paste0(percent, "%")),
+                   size = 10, nudge_x=0.75, show.legend = FALSE) +
+  guides(fill=guide_legend(title="Number of Tissues")) +
+  ggtitle("Significant eQTL colocalization")
+ggsave("coloc_gtex_eqtl_piechart.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 2B: GTEx sQTL colocalization pie chart
+```{r}
+library(data.table)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(ggrepel)
+
+qtl<-fread(paste(dep_dir, "gtex_sqtl_coloc.csv", sep=""))
+
+#subset to PPH4 > 0.7
+qtl<-subset(qtl, qtl$PPH4 > 0.7)
+
+#count # significant colocalization results for each signal
+#read in sentinels to get a total count of the number of signals in the meta-analysis 
+#get chrpos column for qtl dataframe
+sent<-fread(paste(dep_dir, "sentinels.csv", sep=""))
+s<-sent[,c(1,2)]
+colnames(s)[2]<-"chrpos"
+qtl<-merge(qtl, s, by="rsid")
+
+i<-0
+count<-vector()
+chrpos<-vector()
+for (snp in unique(qtl$chrpos)){
+  i<-i+1
+  d<-subset(qtl, qtl$chrpos==snp)
+  count[[i]]<-length(unique(d$tissue))
+  chrpos[[i]]<-snp
+}
+
+data<-data.frame(chrpos,count)
+
+#signals that had 0 colocalization results
+sent<-subset(sent, !(sent$rs_number %in% data$chrpos))
+
+count=c("0", "1", "2-5", ">5")
+n=c(length(unique(sent$rs_number)), nrow(subset(data, data$count==1)), nrow(subset(data, data$count > 1 & data$count < 5)), nrow(subset(data, data$count > 4)))
+percent=round((n/sum(n))*100, digits=0)
+
+d<-data.frame(count, n, percent)
+#make sure legend is in order we want
+d$count<-factor(levels = c("0", "1", "2-5", ">5"), d$count)
+
+#setup code to specify label positions
+df2 <- d %>% 
+  mutate(csum = rev(cumsum(rev(n))), 
+         pos = n/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), n/2, pos))
+
+ggplot(d, aes(x="", y=n, fill=count)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar(theta="y") +
+  theme_void() +
+  theme(legend.position="bottom", legend.key.size=unit(1,'cm'), legend.title = element_text(size=20), legend.text=element_text(size=20)) +
+  geom_label_repel(data = df2,
+                   aes(y = pos, label = paste0(percent, "%")),
+                   size = 10, nudge_x=0.75, show.legend = FALSE) +
+  guides(fill=guide_legend(title="Number of Tissues")) +
+  ggtitle("Significant sQTL colocalization")
+ggsave("coloc_gtex_sqtl_piechart.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 2C: eQTLGen colocalization pie chart
+```{r}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+qtl<-fread(paste(dep_dir, "eqtlgen_coloc.csv", sep=""))
+
+#subset to PPH4 > 0.7
+qtl<-subset(qtl, qtl$PPH4 > 0.7)
+
+#get chrpos column for qtl dataframe
+sent<-fread(paste(dep_dir, "sentinels.csv", sep=""))
+s<-sent[,c(1,2)]
+colnames(s)[2]<-"chrpos"
+qtl<-merge(qtl, s, by="rsid")
+
+#identify chrpos with no colocaliation
+sent<-subset(sent, !(sent$rs_number %in% data$chrpos))
+
+count=c("no colocalization", "colocalized")
+n=c(length(unique(sent$rs_number)), length(unique(data$chrpos)))
+percent=round((n/sum(n))*100, digits=0)
+
+d<-data.frame(count, n, percent)
+#make sure legend is in order we want
+d$count<-factor(levels = c("no colocalization", "colocalized"), d$count)
+
+#setup code to specify label positions
+df2 <- d %>% 
+  mutate(csum = rev(cumsum(rev(n))), 
+         pos = n/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), n/2, pos))
+
+ggplot(d, aes(x="", y=n, fill=count)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar(theta="y") +
+  theme_void() +
+  theme(legend.position="bottom", legend.key.size=unit(1,'cm'), legend.title = element_text(size=20), legend.text=element_text(size=20)) +
+  geom_label_repel(data = df2,
+                   aes(y = pos, label = paste0(percent, "%")),
+                   size = 10, nudge_x=0.75, show.legend = FALSE) +
+  guides(fill=guide_legend(title="Colocalization result")) +
+  ggtitle("eQTL colocalization")
+ggsave("coloc_eqtlgen_piechart.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 2D: DICE colocalization pie chart
+```{r}
+library(data.table)
+
+qtl<-fread(paste(dep_dir, "dice_coloc.csv", sep=""))
+
+#subset to PPH4 > 0.5
+qtl<-subset(qtl, qtl$PPH4 > 0.5)
+
+#count # significant colocalization results for each signal
+#read in sentinels to get a total count of the number of signals in the meta-analysis 
+#get chrpos column for qtl dataframe
+sent<-fread(paste(dep_dir, "sentinels.csv", sep=""))
+s<-sent[,c(1,2)]
+colnames(s)[2]<-"chrpos"
+qtl<-merge(qtl, s, by="rsid")
+
+i<-0
+count<-vector()
+chrpos<-vector()
+for (snp in unique(qtl$chrpos)){
+  i<-i+1
+  d<-subset(qtl, qtl$chrpos==snp)
+  count[[i]]<-length(unique(d$celltype))
+  chrpos[[i]]<-snp
+}
+
+data<-data.frame(chrpos,count)
+
+sent<-subset(sent, !(sent$rs_number %in% data$chrpos))
+
+count=c("0", "1", "2", "3", "4", "5")
+n=c(length(unique(sent$rs_number)), nrow(subset(data, data$count==1)), nrow(subset(data, data$count == 2)), nrow(subset(data, data$count == 3)), nrow(subset(data, data$count == 4)), nrow(subset(data, data$count == 5)))
+percent=round((n/sum(n))*100, digits=0)
+
+d<-data.frame(count, n, percent)
+#there are no sentinels with 3 or 4 different cell type colocalizations PPH4 > 0.5
+d<-d[-c(4,5),]
+
+#make sure legend is in order we want
+d$count<-factor(levels = c("0", "1", "2", "5"), d$count)
+
+#setup code to specify label positions
+df2 <- d %>% 
+  mutate(csum = rev(cumsum(rev(n))), 
+         pos = n/2 + lead(csum, 1),
+         pos = if_else(is.na(pos), n/2, pos))
+
+ggplot(d, aes(x="", y=n, fill=count)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar(theta="y") +
+  theme_void() +
+  theme(legend.position="bottom", legend.key.size=unit(1,'cm'), legend.title = element_text(size=20), legend.text=element_text(size=20)) +
+  geom_label_repel(data = df2,
+                   aes(y = pos, label = paste0(percent, "%")),
+                   size = 10, nudge_x=0.75, show.legend = FALSE) +
+  guides(fill=guide_legend(title="Number of Cell types")) +
+  ggtitle("Significant eQTL colocalization")
+ggsave("coloc_dice_piechart.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 2E: Venn diagram showing the number of signals that colocalized with the same gene across datasets. Overlapping signal-gene pairs between datasets must have colocalization with the same gene.
+```{r}
+library(data.table)
+library(devtools)
+library(ggVennDiagram)
+library(ggplot2)
+
+#read in results
+#gtex eqtl
+ge<-fread(paste(dep_dir, "gtex_eqtl_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+ge<-subset(ge, ge$PPH4 > 0.7)
+
+#gtex sqtl
+gs<-fread(paste(dep_dir, "gtex_sqtl_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+gs<-subset(gs, gs$PPH4 > 0.7)
+
+#DICE
+dice<-fread(paste(dep_dir, "dice_coloc.csv", sep=""))
+#subset to PPH4 > 0.5
+dice<-subset(dice, dice$PPH4 > 0.5)
+
+#eQTLGen
+gen<-fread(paste(dep_dir, "eqtlgen_coloc.csv", sep=""))
+#subset to PPH4 > 0.7
+gen<-subset(gen, gen$PPH4 > 0.7)
+
+#adjust formatting of results, GTEx eQTL, GTEx sQTL, and DICE have transcript IDs with .# but eQTLGen doesn't
+colnames(ge)[2]<-"gene.version"
+ge[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+ge$id<-paste(ge$rsid, ge$gene, sep="_")
+
+gs[,c("chr", "start", "end", "clu", "gene.version"):=tstrsplit(cluster, ":", fixed=T)]
+gs[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+gs$id<-paste(gs$rsid, gs$gene, sep="_")
+
+colnames(dice)[2]<-"gene.version"
+dice[,c("gene", "version"):=tstrsplit(gene.version, ".", fixed=T)]
+dice$id<-paste(dice$rsid, dice$gene, sep="_")
+
+gen$id<-paste(gen$rsid, gen$gene, sep="_")
+
+data <- list(
+  GTEx_eQTL = unique(ge$id),
+  GTEx_sQTL = unique(gs$id),
+  eQTLGen = unique(gen$id),
+  DICE = unique(dice$id)
+)
+
+ggVennDiagram(data, label_alpha= 0, label="count", edge_lty = "blank") +
+  ggplot2::scale_fill_gradient(low="white", high="red") +
+  scale_x_continuous(expand=expansion(mult=0.2))
+ggsave("colocalization_venn_same_gene.png", device="png", width=8, height=5, units= "in", path=out_dir)
+```
+
+Supplementary Figure 2F: RNA pileup plot
+See code in downloaded files/generating_figures/rna_pileup_plots_anvil.wdl
+Written by Bohan Ni.
+
+Supplemental Figure 2G: Correlation of SuSiE predicted credible sets with those identified by condiitional analysis
+```{r}
+library(data.table)
+library(ggplot2)
+
+chrpos=c("1_35259602", "1_113881455", "1_151398465", "1_226367601", "2_54255416", "3_117584223", "3_169769649", "3_190053412", "4_9928595", "4_163126692", "5_1272383", "5_139637905", "6_31815431", "7_124812616", "7_129041243", "8_73004218", "10_94344908", "10_99514276", "10_103907794", "11_108158382", "13_41150640", "14_24242592", "14_72959582", "15_50065546", "16_69357811", "16_70193527", "16_74630845", "16_82166498", "16_87961594", "18_650764", "18_44666476", "19_22032639", "20_36922795", "20_63661765", "22_50532618", "X_66015290", "X_154720412")
+cond=c(1,1,"NA",1,2,1,2,1,1,3,6,1,1,2,1,3,1,1,4,1,1,3,1,1,1,1,1,1,1,3,1,1,1,5,1,1,1)
+credset=c("NA", 3, 1, 1, 2, 1, 2, 1, "NA", 3, 7, 1, 1, 4, 1, 6, "NA", 1, 5, 1, 2, 4, 2, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 6, 2, 1, "NA")
+#primary data are reported 
+#susie results are in supplementary table 8
+#conditional analysis results are reported in Taub et al. 2022
+
+data<-data.table(chrpos, cond, credset)
+
+ggplot(data, aes(credset, cond)) + 
+  geom_point(position="jitter") +
+  ggtitle("Correlation of SuSiE credible sets and conditional analysis signals") +
+  xlab("SuSiE predicted credible sets") +
+  ylab("Number of signals by conditional analysis")
+ggsave("susie_vs_conditional.png", device="png", width=8, height=5, units= "in", path=out_dir)
+```
+
+Supplementary Figure 2H: Manhattan plots for NAF1 signals in TOPMed pooled analysis and NAF1 eQTLs from GTEx
+```{r}
+library(data.table)
+library(ggplot2)
+library(cowplot)
+
+#set shared x-axis limits
+x1=162167173
+x2=164155406
+
+#TOPMed GWAS primary signal
+prime<-fread(paste(dep_dir, "naf1_primary_signal.csv", sep=""))
+g1<-subset(prime, prime$pos==163155406)
+ggplot(prime, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("NAF1 primary signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("naf1_primary_manplot.png", device="png", path=out_dir, width=7, height=4.5, units="in")
+
+#Thryroid eQTL in GTEx
+thyroid<-fread(paste(dep_dir, "naf1_thyroid_qtl.csv", sep=""))
+pph3=0.327
+pph4=0.658
+colnames(thyroid)<-c("snpID","gene_id", "variant_id", "tss_distance", "ma_samples", "ma_count", "maf", "pvalue", "slope", "slope_se", "chr", "pos", "ref", "alt", "build","R2")
+g1<-subset(thyroid, thyroid$pos==163155406)
+ggplot(thyroid, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("NAF1 Thyroid eQTL") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  annotate(geom="text", x=(x2-200000), y=max(-log10(as.numeric(thyroid$pvalue))), label=paste("PPH4 = ", round(pph4, digits=3), sep=""), size=5) +
+      annotate(geom="text", x=(x2-200000), y=(max(-log10(as.numeric(thyroid$pvalue)))-(max(-log10(as.numeric(thyroid$pvalue)))/10)), label=paste("PPH3 = ", round(pph3, digits=3), sep=""), size=5) +
+  theme(text=element_text(size=20))
+ggsave("naf1_thyroid_qtl_manplot.png", device="png", path=out_dir, width=7, height=4.5, units="in")
+
+#TOPMed GWAS tertiary signal
+tert<-fread(paste(dep_dir, "naf1_tertiary_signal.csv", sep=""))
+g1<-subset(tert, tert$pos==163126692)
+ggplot(tert, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="black",shape=22, size=3) +
+  ggtitle("NAF1 tertiary signal") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20))
+ggsave("naf1_tertiary_manplot.png", device="png", path=out_dir, width=7, height=4.5, units="in")
+
+#lung eQTL in GTEx
+lung<-fread(paste(dep_dir, "naf1_lung_qtl.csv", sep=""))
+pph3=0.298
+pph4=0.686
+colnames(lung)<-c("snpID","gene_id", "variant_id", "tss_distance", "ma_samples", "ma_count", "maf", "pvalue", "slope", "slope_se", "chr", "pos", "ref", "alt", "build","R2")
+g1<-subset(lung, lung$pos==163126692)
+ggplot(lung, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue)), color=R2)) +
+  geom_point() +
+  scale_y_continuous(name="-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome", limits=c(x1,x2)) +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(pvalue))), inherit.aes=F, fill="black",shape=23, size=3) +
+  ggtitle("NAF1 Lung eQTL") +
+  scale_color_gradientn(colours = rainbow(5)) +
+  annotate(geom="text", x=(x2-200000), y=max(-log10(as.numeric(thyroid$pvalue))), label=paste("PPH4 = ", round(pph4, digits=3), sep=""), size=5) +
+      annotate(geom="text", x=(x2-200000), y=(max(-log10(as.numeric(thyroid$pvalue)))-(max(-log10(as.numeric(thyroid$pvalue)))/10)), label=paste("PPH3 = ", round(pph3, digits=3), sep=""), size=5) +
+  theme(text=element_text(size=20))
+ggsave("naf1_lung_qtl_manplot.png", device="png", path=out_dir, width=7, height=4.5, units="in")
+```
+
+Supplementary Figure 3A: Enrichment of GO terms across analyses 
+```{r}
+library(data.table)
+library(ggplot2)
+
+#this dataset uses only proximal genes
+prox<-fread(paste(dep_dir, "proximal_genes_panther_output_formatted.txt", sep=""))
+colnames(prox)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+prox$analysis<-rep("Proximal gene only")
+
+#this dataset uses only genes indicated by colocalization analysis
+coloc<-fread(paste(dep_dir, "coloc_only_genes_panther_output_formatted.txt", sep=""))
+colnames(coloc)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+coloc$analysis<-rep("Colocalized gene only")
+
+#this dataset uses colocalization data where available, proximal data where not available
+proxfillin<-fread(paste(dep_dir, "coloc_proxfillin_biooverride_genes_panther_output_formatted.txt", sep=""))
+colnames(proxfillin)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+proxfillin$analysis<-rep("Proximal+Coloc")
+
+#this dataset overrides colocalization and proximal genes by genes known to affect TL
+#otherwise, this dataset uses colocalization data where available, proximal data where not available
+bio<-fread(paste(dep_dir, "coloc_proxfillin_biooverride_genes_panther_output_formatted.txt", sep=""))
+colnames(bio)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+bio$analysis<-rep("Colocalized+Proximal+Bio")
+
+data<-do.call("rbind", list(prox,coloc,proxfillin,bio))
+
+#read in unique GO terms that have FDR < 0.05 in at least one analysis and have been assigned broader groups
+go_terms<-fread(paste(dep_dir, "significant_go_terms_formatted.csv", sep=""))
+#remove the empty values in the GO_biological_process column
+go_terms<-subset(go_terms, !(go_terms$GO_biological_process == ""))
+
+data<-merge(data,go_terms, by="GO_biological_process")
+#remove duplicates
+data<-unique(data)
+
+#force group order to be same as in other GO enrichment panel
+o<-subset(data, data$analysis=="Colocalized+Proximal+Bio")
+o<-o[order(o$p),]
+o<-o[,10]
+o<-unique(o)
+data$group<-factor(data$group, levels=c(rev(o$group)))
+
+#force analysis order
+data$analysis<-factor(data$analysis, levels=c("Colocalized gene only", "Proximal gene only", "Proximal+Coloc", "Colocalized+Proximal+Bio"))
+
+ggplot(data, aes(x=group, y=-log10(pvalue), color=analysis)) + 
+  geom_point(alpha=0.5) + 
+  facet_grid(analysis ~ .) +
+  theme(axis.text.x = element_text(angle=90, hjust=0.95, vjust=0.3), strip.background = element_blank(), strip.text.y = element_blank(), legend.position="bottom")
+ggsave("go_enrichment_results_allterms.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 3B: Comparison of representative GO term from each group across analyses
+```{r}
+library(data.table)
+library(ggplot2)
+
+#this dataset uses only proximal genes
+prox<-fread(paste(dep_dir, "proximal_genes_panther_output_formatted.txt", sep=""))
+colnames(prox)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+
+#this dataset uses only genes indicated by colocalization analysis
+coloc<-fread(paste(dep_dir, "coloc_only_genes_panther_output_formatted.txt", sep=""))
+colnames(coloc)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+
+#this dataset uses colocalization data where available, proximal data where not available
+proxfillin<-fread(paste(dep_dir, "coloc_proxfillin_biooverride_genes_panther_output_formatted.txt", sep=""))
+colnames(proxfillin)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+
+#this dataset overrides colocalization and proximal genes by genes known to affect TL
+#otherwise, this dataset uses colocalization data where available, proximal data where not available
+bio<-fread(paste(dep_dir, "coloc_proxfillin_biooverride_genes_panther_output_formatted.txt", sep=""))
+colnames(bio)<-c("GO_biological_process", "Homo sapiens_reflist", "gene_list_n", "expected", "over-under", "fold_enrichment", "pvalue", "FDR")
+
+#read in unique GO terms that have FDR < 0.05 in at least one analysis and have been assigned broader groups
+go_terms<-fread(paste(dep_dir, "significant_go_terms_formatted.csv", sep=""))
+#remove the empty values in the GO_biological_process column
+go_terms<-subset(go_terms, !(go_terms$GO_biological_process == ""))
+
+#identify the GO term with the smallest p-value for each group in colocalized + proximal + bio analysis
+i<-0
+p<-vector()
+for (category in unique(go_terms$group)){
+  i<-i+1
+  df<-subset(go_terms, go_terms$group==category)
+  df<-subset(bio, bio$GO_biological_process %in% df$GO_biological_process)
+  df$group<-rep(category, nrow(df))
+  df<-df[order(pvalue),]
+  df<-df[1,]
+  if (i==1){
+    df2<-df
+  }else{
+    df2<-rbind(df2,df)
+  }
+}
+
+#get the data for the other analyses
+i<-0
+go_term<-vector()
+p<-vector()
+analysis<-vector()
+group<-vector()
+for (term in df2$GO_biological_process){
+  #get bio trump p-value
+  i<-i+1
+  go_term[i]<-term
+  group[i]<-df2[df2$GO_biological_process==term,]$group
+  p[i]<-bio[bio$GO_biological_process==term,]$pvalue
+  analysis[i]<-"Colocalized/Proximal/Bio genes"
+  #get proximal fill in p-value
+  i<-i+1
+  go_term[i]<-term
+  group[i]<-df2[df2$GO_biological_process==term,]$group
+  p[i]<-proxfillin[proxfillin$GO_biological_process==term,]$pvalue
+  analysis[i]<-"Colocalized/Proximal genes"
+  #get colocalized only p-value
+  i<-i+1
+  go_term[i]<-term
+  group[i]<-df2[df2$GO_biological_process==term,]$group
+  p[i]<-coloc[coloc$GO_biological_process==term,]$pvalue
+  analysis[i]<-"Colocalized genes"
+  #get proximal only p-value
+  i<-i+1
+  go_term[i]<-term
+  group[i]<-df2[df2$GO_biological_process==term,]$group
+  p[i]<-prox[prox$GO_biological_process==term,]$pvalue
+  analysis[i]<-"Proximal genes"
+}
+df<-data.frame(go_term, group, p, analysis)
+
+#force analysis to be a certain order
+o<-subset(df, df$analysis=="Colocalized/Proximal/Bio genes")
+o<-o[order(o$p),]
+df$group<-factor(df$group, levels=c(rev(o$group)))
+df$analysis<-factor(df$analysis, levels=c("Colocalized genes", "Proximal genes", "Colocalized/Proximal genes", "Colocalized/Proximal/Bio genes"))
+
+
+#plot
+ggplot(df, aes(x=group, y=-log10(p), fill=analysis)) + 
+  geom_bar(stat="identity", position=position_dodge()) +
+  theme(axis.text.x=element_text(angle=90, hjust=0.95, vjust=0.3), legend.position="bottom") +
+  ggtitle("GO term chosen by min p-value in C+P+B") +
+  ylab("-log10(pvalue)")
+ggsave("go_enrichment_results.png", device="png", path=out_dir, height=7, width=9, units="in")
+```
+
+Figure 3A: Enrichment of meta-analysis 95% credible sets across ENCODE TFBS
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+#read in enrichment analysis data
+encode<-fread(paste(dep_dir, "CredibleSets_wgEncodeRegTfbsCluster_enrichment.txt", sep=""))
+colnames(encode)[1]<-"TF"
+
+#read in file that has for each TF in both datasets whether it's known to affect TL
+tflist<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+
+#core represents TFs that regulate expression of "core" TL genes, including TERRA
+core<-subset(tflist, tflist$category %in% c("tlm_reg_exp", "TERRA"))
+
+#alt represents TFs that have an effect on alternative telomere lengthening (ALT)
+alt<-subset(tflist, tflist$category=="ALT")
+
+c<-subset(encode, encode$TF %in% core$TF)
+a<-subset(encode, encode$TF %in% alt$TF)
+
+ggplot(encode, aes(encode$enrich, encode$log10PValue)) +
+  geom_point(color="grey80") +
+  geom_point(data=c, aes(x=c$enrich, y=c$log10PValue), inherit.aes = F, color="red") +
+  geom_point(data=a, aes(x=a$enrich, y=a$log10PValue), inherit.aes = F, color="blue") +
+  ylab("-log10(p-value)") +
+  xlab("Observed/Expected Fold Enrichment") +
+  ggtitle("Credible set enrichment across ENCODE transcription factor binding sites") +
+  theme_bw(base_size = 10) +
+  geom_label_repel(data=subset(encode, encode$TF %in% c(c$TF,a$TF) | encode$enrich > 4 | encode$log10PValue > 150), aes(x=enrich, y=log10PValue, label=TF), max.overlaps=200, min.segment.length = 0, box.padding = 0.75, size=2, label.size=NA, fill=NA)
+ggsave("tfbs_credset_encode.png", device="png", path=out_dir, width=6, height=6, unit="in")
+```
+
+Figure 3B: Histone and DNA binding factor ChIP-seq data near rs12044242
+Generated using the WashU browser
+https://epigenomegateway.wustl.edu/browser/roadmap/
+
+Supplementary Figure 4A: ReMap TFBS enrichment of 95% credible set
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+#read in enrichment analysis data
+remap<-fread(paste(dep_dir, "CredibleSets_RemapNonRedundantTfbs_enrichment.txt", sep=""))
+colnames(remap)[1]<-"TF"
+
+#read in file that has for each TF in both datasets whether it's known to affect TL
+tflist<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+
+#core represents TFs that regulate expression of "core" TL genes, including TERRA
+core<-subset(tflist, tflist$category %in% c("tlm_reg_exp", "TERRA"))
+
+#alt represents TFs that have an effect on alternative telomere lengthening (ALT)
+alt<-subset(tflist, tflist$category=="ALT")
+
+#REMAP plot
+c<-subset(remap, remap$TF %in% core$TF)
+a<-subset(remap, remap$TF %in% alt$TF)
+
+ggplot(remap, aes(remap$enrich, remap$log10PValue)) +
+  geom_point(color="grey80") +
+  geom_point(data=c, aes(x=c$enrich, y=c$log10PValue), inherit.aes = F, color="red") +
+  geom_point(data=a, aes(x=a$enrich, y=a$log10PValue), inherit.aes = F, color="blue") +
+  ylab("-log10(p-value)") +
+  xlab("Observed/Expected Fold Enrichment") +
+  ggtitle("Credible set enrichment across ReMap transcription factor binding sites") +
+  theme_bw(base_size = 10) +
+  geom_label_repel(data=subset(remap, remap$TF %in% c(c$TF,a$TF) | remap$log10PValue > 160 | remap$enrich > 6.5), aes(x=enrich, y=log10PValue, label=TF), max.overlaps=200, min.segment.length = 0, box.padding = 0.75, size=2, label.size=NA, fill=NA)
+ggsave("tfbs_credset_remap.png", device="png", path=out_dir, width=6, height=6, unit="in")
+```
+
+Supplementary Figure 3B: Enrichment of lead SNPs across ReMap TFBS 
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+#read in enrichment analysis data
+remap<-fread(paste(dep_dir, "leadsnp_remap_tf_enrich_ALL.txt", sep=""))
+colnames(remap)[5]<-"TF"
+
+#read in file that has for each TF in both datasets whether it's known to affect TL
+tflist<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+
+#core represents TFs that regulate expression of "core" TL genes, including TERRA
+core<-subset(tflist, tflist$category %in% c("tlm_reg_exp", "TERRA"))
+
+#alt represents TFs that have an effect on alternative telomere lengthening (ALT)
+alt<-subset(tflist, tflist$category=="ALT")
+
+#REMAP plot
+c<-subset(remap, remap$TF %in% core$TF)
+a<-subset(remap, remap$TF %in% alt$TF)
+
+ggplot(remap, aes(remap$enrich, remap$log10PValue)) +
+  geom_point(color="grey80") +
+  geom_point(data=c, aes(x=c$enrich, y=c$log10PValue), inherit.aes = F, color="red") +
+  geom_point(data=a, aes(x=a$enrich, y=a$log10PValue), inherit.aes = F, color="blue") +
+  ylab("-log10(p-value)") +
+  xlab("Observed/Expected Fold Enrichment") +
+  ggtitle("Lead SNPs enrichment across ReMap transcription factor binding sites") +
+  theme_bw(base_size = 10) +
+  geom_label_repel(data=subset(remap, remap$TF %in% c(c$TF,a$TF) | remap$log10PValue > 9 | remap$enrich > 20), aes(x=enrich, y=log10PValue, label=TF), max.overlaps=200, min.segment.length = 0, box.padding = 0.75, size=2, label.size=NA, fill=NA)
+ggsave("tfbs_leadsnp_remap.png", device="png", path=out_dir, width=6, height=6, unit="in")
+```
+
+Supplementary Figure 4C: Enrichment of lead SNPs across ENCODE TFBS 
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+#read in enrichment analysis data
+encode<-fread(paste(dep_dir, "leadsnp_encode_tf_enrich_ALL.txt", sep=""))
+colnames(encode)[5]<-"TF"
+
+#read in file that has for each TF in both datasets whether it's known to affect TL
+tflist<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+
+#core represents TFs that regulate expression of "core" TL genes, including TERRA
+core<-subset(tflist, tflist$category %in% c("tlm_reg_exp", "TERRA"))
+
+#alt represents TFs that have an effect on alternative telomere lengthening (ALT)
+alt<-subset(tflist, tflist$category=="ALT")
+
+#encode plot
+c<-subset(encode, encode$TF %in% core$TF)
+a<-subset(encode, encode$TF %in% alt$TF)
+
+ggplot(encode, aes(encode$enrich, encode$log10PValue)) +
+  geom_point(color="grey80") +
+  geom_point(data=c, aes(x=c$enrich, y=c$log10PValue), inherit.aes = F, color="red") +
+  geom_point(data=a, aes(x=a$enrich, y=a$log10PValue), inherit.aes = F, color="blue") +
+  ylab("-log10(p-value)") +
+  xlab("Observed/Expected Fold Enrichment") +
+  ggtitle("Lead SNPs enrichment across ENCODE transcription factor binding sites") +
+  theme_bw(base_size = 10) +
+  geom_label_repel(data=subset(encode, encode$TF %in% c(c$TF,a$TF) | encode$enrich > 10 | encode$log10PValue > 7.5), aes(x=enrich, y=log10PValue, label=TF), max.overlaps=200, min.segment.length = 0, box.padding = 0.75, size=2, label.size=NA, fill=NA)
+ggsave("tfbs_leadsnp_encode.png", device="png", path=out_dir, width=6, height=6, unit="in")
+```
+
+Supplementary Figure 4D: correlation between TFBS enrichment using 95% credible sets
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+encode<-fread(paste(dep_dir, "CredibleSets_wgEncodeRegTfbsCluster_enrichment.txt", sep=""))
+remap<-fread(paste(dep_dir, "CredibleSets_RemapNonRedundantTfbs_enrichment.txt", sep=""))
+
+#subset to shared TFs
+encode<-encode[,c(1,4)]
+colnames(encode)<-c("TF", "encode_log10pvalue")
+
+remap<-remap[,c(1,4)]
+colnames(remap)<-c("TF", "remap_log10pvalue")
+
+data<-merge(encode, remap, by="TF")
+
+#calculate line of best fit
+reg<-lm(data=data, remap_log10pvalue~encode_log10pvalue)
+slope<-coefficients(reg)[[2]]
+intercept<-coefficients(reg)[[1]]
+
+#read in file that has list of TFs involved in TL to color subset of data points
+telo_tf<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+#subset to TFs involved in regulation of core gene expression/TERRA
+core<-subset(telo_tf, telo_tf$category %in% c("tlm_reg_exp", "TERRA"))
+#subset to TFs involved in ALT
+alt<-subset(telo_tf, telo_tf$category == "ALT")
+
+c<-subset(data, data$TF %in% core$TF)
+a<-subset(data, data$TF %in% alt$TF)
+
+ggplot(data, aes(encode_log10pvalue, remap_log10pvalue)) + 
+  geom_point(color="grey50") +
+  geom_point(data=c, aes(x=encode_log10pvalue, y=remap_log10pvalue), inherit.aes=F, color="red") +
+  geom_point(data=a, aes(x=encode_log10pvalue, y=remap_log10pvalue), inherit.aes=F, color="blue") +
+  ylab("-log10(p-value) calculated from ReMap data") +
+  xlab("-log10(p-value) calculated from ENCODE data") +
+  ggtitle("Correlation of enrichment using 95% credible set SNPs") +
+  theme_bw() +
+  geom_abline(intercept=intercept, slope=slope, color="grey60") +
+  annotate(geom="text", x=200, y=175, label=paste("R2 = ", round(slope, digits=3), sep=""))
+ggsave("tfbs_credset_correlation.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 4E: correlation between TFBS enrichment using lead SNPs
+```{r}
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+
+encode<-fread(paste(dep_dir, "leadsnp_encode_tf_enrich_ALL.txt", sep=""))
+remap<-fread(paste(dep_dir, "leadsnp_remap_tf_enrich_ALL.txt", sep=""))
+
+#subset to shared TFs
+encode<-encode[,c(4,5)]
+colnames(encode)<-c("encode_log10pvalue", "TF")
+
+remap<-remap[,c(4,5)]
+colnames(remap)<-c("remap_log10pvalue", "TF")
+
+data<-merge(encode, remap, by="TF")
+
+#calculate line of best fit 
+reg<-lm(data=data, remap_log10pvalue~encode_log10pvalue)
+slope<-coefficients(reg)[[2]]
+intercept<-coefficients(reg)[[1]]
+
+#read in file that has list of TFs involved in TL to color subset of data points
+telo_tf<-fread(paste(dep_dir, "tf_list_2023_04_17.csv", sep=""))
+#subset to TFs involved in regulation of core gene expression/TERRA
+core<-subset(telo_tf, telo_tf$category %in% c("tlm_reg_exp", "TERRA"))
+#subset to TFs involved in ALT
+alt<-subset(telo_tf, telo_tf$category == "ALT")
+
+c<-subset(data, data$TF %in% core$TF)
+a<-subset(data, data$TF %in% alt$TF)
+
+ggplot(data, aes(encode_log10pvalue, remap_log10pvalue)) + 
+  geom_point(color="grey50") +
+  geom_point(data=c, aes(x=encode_log10pvalue, y=remap_log10pvalue), inherit.aes=F, color="red") +
+  geom_point(data=a, aes(x=encode_log10pvalue, y=remap_log10pvalue), inherit.aes=F, color="blue") +
+  ylab("-log10(p-value) calculated from ReMap data") +
+  xlab("-log10(p-value) calculated from ENCODE data") +
+  ggtitle("Correlation of enrichment using lead SNPs") +
+  theme_bw() +
+  geom_abline(intercept=intercept, slope=slope, color="grey60") +
+  annotate(geom="text", x=8.2, y=8.2, label=paste("R2 = ", round(slope, digits=3), sep=""))
+ggsave("tfbs_leadsnp_correlation.png", device="png", path=out_dir)
+```
+
+Figure 4A: Manhattan plot for TOPMed pooled GWAS at TCL1A locus (led by rs2296312)
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "topmed_pooled_gwas_tcl1a.csv", sep=""))
+
+#plot 
+g1<-subset(data, data$snpID=="14:95711986:T:C")
+#select a ymax value to make the y-axis on this plot and the gxa manplot match
+ymax<- round(-log10(min(data$Score.pval))+1, digits=0)
+
+ggplot(data, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)))) +
+  geom_point() + 
+  scale_x_continuous(name="Position on chromosome") + 
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="red",shape=23, size=3) + 
+  ggtitle("TOPMed Pooled GWAS for rs2296312 locus") + 
+  scale_color_gradientn(colours = rainbow(5)) +
+  geom_hline(yintercept=5, color="blue") +
+  ylim(0,ymax) +
+  ylab("-log10(p-value)")
+ggsave("tcl1a_topmed_pooled_manplot.png", device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Figure 4B: SNP x Age GWAS for TCL1A locus (led by rs2296312)
+```{r}
+library(data.table)
+library(ggplot2)
+
+#read in data that was subset on Rockfish
+data<-fread(paste(dep_dir, "snpxage_tcl1a.csv", sep=""))
+
+#plot 
+g1<-subset(data, data$snpID=="14:95711986:T:C")
+#set y-max to be equal to that of Figure 4A
+ymax=10
+
+ggplot(data, aes(x=as.numeric(pos), y=-log10(as.numeric(GxE.pval)))) +
+  geom_point() + 
+  scale_x_continuous(name="Position on chromosome") + 
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(GxE.pval))), inherit.aes=F, fill="red",shape=23, size=3) + 
+  ggtitle("SNP x Age GWAS for rs2296312 locus") + 
+  scale_color_gradientn(colours = rainbow(5)) +
+  geom_hline(yintercept=5, color="blue") +
+  ylim(0,ymax) +
+  ylab("-log10(p-value)")
+ggsave("tcl1a_snpxage_manplot.png", device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Figure 4C: rs2296312 effect size estimate across age groups
+```{r}
+library(data.table)
+library(ggplot2)
+
+#read in data
+y<-fread(paste(dep_dir, "age_split3_young_tcl1a.csv", sep=""))
+m<-fread(paste(dep_dir, "age_split3_middle_tcl1a.csv", sep=""))
+o<-fread(paste(dep_dir, "age_split3_old_tcl1a.csv", sep=""))
+
+#create a df that has just the SNP of interest for each group
+#add a column for each age strata for an index (1-3) and group (young, middle, eldest)
+
+one<-subset(y, y$snpID=="14:95711986:T:C")
+one$index<-1
+one$group<-"Youngest [0,43]"
+middle<-subset(m, m$snpID=="14:95711986:T:C")
+middle$index<-2
+middle$group<-"Middle (43,61]"
+eldest<-subset(o, o$snpID=="14:95711986:T:C")
+eldest$index<-3
+eldest$group<-"Eldest (61,98]"
+
+df<-do.call(rbind, list(one,middle,eldest))
+
+#calculate bounds of beta CI
+df$beta<-df$Score/(df$Score.SE^2)
+df$se<-1/df$Score.SE
+df$CI_lower<-df$beta - (1.96*df$se)
+df$CI_upper<-df$beta + (1.96*df$se)
+
+ggplot(df, aes(y=index, x=beta, xmin=CI_lower, xmax=CI_upper)) +
+    geom_point(aes(size=se)) +
+    geom_errorbar() +
+    scale_x_continuous(name="Effect size estimate with 95% CI") +
+    scale_y_continuous(name="", breaks=1:3, labels=df$group, trans="reverse") +
+    geom_vline(xintercept=0, color="black", alpha=0.5, linetype="dashed") +
+    ggtitle("Effect size across age groups") +
+    theme(legend.position = "none", text=element_text(size=16))
+ggsave("tcl1a_agegroup_forest.png", device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Figure 4D: rs2296312 effect size estimate across ancestry groups
+```{r}
+library(data.table)
+library(ggplot2)
+
+#read in df that I generated on rockfish that has the summary statistics for 14:95711986:T:C from the ancestry-stratified TOPMed GWAS
+df<-fread(paste(dep_dir, "tcl1a_ancestry_forest.csv", sep=""))
+
+ggplot(df, aes(y=index, x=beta, xmin=CI_lower, xmax=CI_upper)) +
+    geom_point(aes(size=se)) +
+    geom_errorbar() +
+    scale_x_continuous(name="Effect size estimate with 95% CI") +
+    scale_y_continuous(name="", breaks=1:4, labels=df$group, trans="reverse") +
+    geom_vline(xintercept=0, color="black", alpha=0.5, linetype="dashed") +
+    ggtitle("Effect size estimate for rs2296312 across ancestry groups") +
+    theme(legend.position = "none", text=element_text(size=16))
+ggsave("tcl1a_ancestry_forest.png", device="png", path=out_dir, width=5.5, height=4.5, units="in")
+```
+
+Figure 4E: Manhattan plots for age-stratified GWAS at the TCL1A locus
+```{r}
+library(data.table)
+library(ggplot2)
+
+y<-fread(paste(dep_dir, "age_split3_young_tcl1a.csv", sep=""))
+m<-fread(paste(dep_dir, "age_split3_middle_tcl1a.csv", sep=""))
+o<-fread(paste(dep_dir, "age_split3_old_tcl1a.csv", sep=""))
+
+#x-axes are already matched
+#identify max y-axis value
+y1<-subset(y$Score.pval, y$Score.pval==min(y$Score.pval))
+m1<-subset(m$Score.pval, m$Score.pval==min(m$Score.pval))
+o1<-subset(o$Score.pval, o$Score.pval==min(o$Score.pval))
+
+ymax<-min(y1,m1,o1)
+ymax<-round(-log10(ymax), digits=0) + 0.5
+
+#plot for young group
+g1<-subset(y, y$snpID=="14:95711986:T:C")
+
+ggplot(y, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=r2)) +
+  geom_point() + 
+  ylab("-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome") + 
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="black",shape=23, size=3) + 
+  ggtitle("Youngest [0,43]") + 
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20)) +
+  ylim(0,ymax)
+ggsave("tcl1a_young_manplot.png", device="png", path=out_dir, width=7, height=7, units="in")
+
+#plot for middle group
+g1<-subset(m, m$snpID=="14:95711986:T:C")
+
+ggplot(m, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=r2)) +
+  geom_point() + 
+  ylab("-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome") + 
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="black",shape=23, size=3) + 
+  ggtitle("Middle (42,61]") + 
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20)) +
+  ylim(0,ymax)
+ggsave("tcl1a_middle_manplot.png", device="png", path=out_dir, width=7, height=7, units="in")
+
+#plot for eldest group
+g1<-subset(o, o$snpID=="14:95711986:T:C")
+
+ggplot(o, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval)), color=r2)) +
+  geom_point() + 
+  ylab("-log10(p-value)") + 
+  scale_x_continuous(name="Position on chromosome") + 
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(as.numeric(Score.pval))), inherit.aes=F, fill="black",shape=23, size=3) + 
+  ggtitle("Eldest (61,98]") + 
+  scale_color_gradientn(colours = rainbow(5)) +
+  theme(text=element_text(size=20)) +
+  ylim(0,ymax)
+ggsave("tcl1a_eldest_manplot.png", device="png", path=out_dir, width=7, height=7, units="in")
+```
+
+Supplementary Figure 5A: Sex proportions across age-stratified GWAS
+```{r}
+library(data.table)
+library(stringr)
+young<-fread(paste(dep_dir, "all_split3_first_input_2020_05_04.csv", sep=""))
+young$dataset<-rep("first", nrow(young))
+mid<-fread(paste(dep_dir, "all_split3_second_input_2020_05_04.csv", sep=""))
+mid$dataset<-rep("second", nrow(mid))
+eld<-fread(paste(dep_dir, "all_split3_third_input_2020_05_04.csv", sep=""))
+eld$dataset<-rep("third", nrow(eld))
+
+data<-do.call("rbind", list(young, mid, eld))
+
+#process the data table to generate an Ancestry column
+#some studyAncAdjust values have multiple _
+data$count<-str_count(data$studyAncAdjust, '_')
+unique(data$count)
+#three max
+
+one<-subset(data, data$count == 1)
+one[,c("stu", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+o<-one[,c(1:19,22)]
+
+two<-subset(data, data$count == 2)
+two[,c("start", "middle", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+tw<-two[,c(1:19,23)]
+
+three<-subset(data, data$count == 3)
+three[,c("name", "start", "middle", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+th<-three[,c(1:19,24)]
+
+data3<-do.call("rbind", list(o, tw, th))
+
+#separate into broad ancestry groups
+white<-subset(data3, data3$ethnicity %in% c("Amish", "White"))
+white$general<-rep("White", nrow(white))
+black<-subset(data3, data3$ethnicity == "Black")
+black$general<-rep("Black", nrow(black))
+hl<-subset(data3, data3$ethnicity %in% c("CentralAmerican", "CostaRican", "Cuban", "Dominican", "Hispanic", "Mexican", "PuertoRican", "SouthAmerican"))
+hl$general<-rep("Hispanic/Latino", nrow(hl))
+asian<-subset(data3, data3$ethnicity %in% c("Asian", "HanChinese", "Taiwanese"))
+asian$general<-rep("Asian", nrow(asian))
+other<-subset(data3, data3$ethnicity %in% c("All", "Samoan", "NonBlack", "Brazilian"))
+other$general<-rep("Other", nrow(other))
+
+data4<-do.call("rbind", list(white, black, hl, asian, other))
+
+#determine how to divide the groups by age to maximize similar # individuals in each group
+cut_number(data4$age_at_dna_blood_draw_wgs, n=3)
+#Levels: [0,43] (43,61] (61,98]
+
+young<-subset(data4, data4$age_at_dna_blood_draw_wgs <= 43)
+middle<-subset(data4, data4$age_at_dna_blood_draw_wgs > 43 & data4$age_at_dna_blood_draw_wgs <= 61)
+old<-subset(data4, data4$age_at_dna_blood_draw_wgs <= 98 & data4$age_at_dna_blood_draw_wgs > 61)
+
+#there's only one individual in GALAII in the middle age group
+#Drop this individual to avoid singularity issues
+middle_2<-subset(middle, !(middle$study=="GALAII"))
+
+#there's only one individual in GenSalt in the old age group
+#drop this individual to avoid singularity issues
+old_2<-subset(old, !(old$study =="GenSalt"))
+
+#make a data frame of the sex proportions over the age groups
+sex<-rep(c("Male","Female"), 3)
+age_group<-c("[0,43]", "[0,43]", "(43,61]", "(43,61]","(61,98]","(61,98]")
+count<-c(nrow(subset(young, young$sex=="M")), nrow(subset(young, young$sex=="F")), nrow(subset(middle_2, middle_2$sex=="M")), nrow(subset(middle_2, middle_2$sex=="F")), nrow(subset(old_2, old_2$sex=="M")), nrow(subset(old_2, old_2$sex=="F")))
+
+df<-data.frame(sex, age_group, count)
+#make the age groups a factor to force the order on the x-axis
+df$age_group<-factor(df$age_group, levels=c("[0,43]", "(43,61]", "(61,98]"))
+
+#graph the sex proportions over the age groups
+ggplot(df, aes(x=age_group, y=count, fill=sex)) +
+  geom_bar(position="fill", stat="identity") +
+  xlab("Age group") +
+  ylab("Proportion of individuals") +
+  ggtitle("Sex proportions across age-stratified groups")
+ggsave("age_stratified_gwas_sex_distribution.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 5B: Proportion of broad ancestry groups across age stratified GWAS
+```{r}
+library(data.table)
+library(stringr)
+young<-fread(paste(dep_dir, "all_split3_first_input_2020_05_04.csv", sep=""))
+young$dataset<-rep("first", nrow(young))
+mid<-fread(paste(dep_dir, "all_split3_second_input_2020_05_04.csv", sep=""))
+mid$dataset<-rep("second", nrow(mid))
+eld<-fread(paste(dep_dir, "all_split3_third_input_2020_05_04.csv", sep=""))
+eld$dataset<-rep("third", nrow(eld))
+
+data<-do.call("rbind", list(young, mid, eld))
+
+#process the data table to generate an Ancestry column
+#some studyAncAdjust values have multiple _
+data$count<-str_count(data$studyAncAdjust, '_')
+unique(data$count)
+#three max
+
+one<-subset(data, data$count == 1)
+one[,c("stu", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+o<-one[,c(1:19,22)]
+
+two<-subset(data, data$count == 2)
+two[,c("start", "middle", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+tw<-two[,c(1:19,23)]
+
+three<-subset(data, data$count == 3)
+three[,c("name", "start", "middle", "ethnicity"):=tstrsplit(studyAncAdjust, "_", fixed=T)]
+th<-three[,c(1:19,24)]
+
+data3<-do.call("rbind", list(o, tw, th))
+
+#separate into broad ancestry groups
+white<-subset(data3, data3$ethnicity %in% c("Amish", "White"))
+white$general<-rep("White", nrow(white))
+black<-subset(data3, data3$ethnicity == "Black")
+black$general<-rep("Black", nrow(black))
+hl<-subset(data3, data3$ethnicity %in% c("CentralAmerican", "CostaRican", "Cuban", "Dominican", "Hispanic", "Mexican", "PuertoRican", "SouthAmerican"))
+hl$general<-rep("Hispanic/Latino", nrow(hl))
+asian<-subset(data3, data3$ethnicity %in% c("Asian", "HanChinese", "Taiwanese"))
+asian$general<-rep("Asian", nrow(asian))
+other<-subset(data3, data3$ethnicity %in% c("All", "Samoan", "NonBlack", "Brazilian"))
+other$general<-rep("Other", nrow(other))
+
+data4<-do.call("rbind", list(white, black, hl, asian, other))
+
+#determine how to divide the groups by age to maximize similar # individuals in each group
+cut_number(data4$age_at_dna_blood_draw_wgs, n=3)
+#Levels: [0,43] (43,61] (61,98]
+
+young<-subset(data4, data4$age_at_dna_blood_draw_wgs <= 43)
+middle<-subset(data4, data4$age_at_dna_blood_draw_wgs > 43 & data4$age_at_dna_blood_draw_wgs <= 61)
+old<-subset(data4, data4$age_at_dna_blood_draw_wgs <= 98 & data4$age_at_dna_blood_draw_wgs > 61)
+
+#there's only one individual in GALAII in the middle age group
+#Drop this individual to avoid singularity issues
+middle_2<-subset(middle, !(middle$study=="GALAII"))
+
+#there's only one individual in GenSalt in the old age group
+#drop this individual to avoid singularity issues
+old_2<-subset(old, !(old$study =="GenSalt"))
+
+#make a data frame of the ancestry proportions over the three age groups
+age_group<-c(rep("[0,43]",5), rep("(43,61]", 5), rep("(61,98]", 5))
+ancestry<-c(rep(c("White", "Black", "Hispanic_Latino", "Asian", "Other"), 3))
+n<-c(nrow(young[young$general=="White"]), nrow(young[young$general=="Black"]), nrow(young[young$general=="Hispanic/Latino"]), nrow(young[young$general=="Asian"]), nrow(young[young$general=="Other"]), nrow(middle_2[middle_2$general=="White"]), nrow(middle_2[middle_2$general=="Black"]), nrow(middle_2[middle_2$general=="Hispanic/Latino"]), nrow(middle_2[middle_2$general=="Asian"]), nrow(middle_2[middle_2$general=="Other"]), nrow(old_2[old_2$general=="White"]), nrow(old_2[old_2$general=="Black"]), nrow(old_2[old_2$general=="Hispanic/Latino"]), nrow(old_2[old_2$general=="Asian"]), nrow(old_2[old_2$general=="Other"]))
+
+df<-data.frame(age_group, ancestry, n)
+#make the age groups a factor to force the order on the x-axis
+df$age_group<-factor(df$age_group, levels=c("[0,43]", "(43,61]", "(61,98]"))
+
+ggplot(df, aes(x=age_group, y=n, fill=ancestry)) +
+  geom_bar(position="fill", stat="identity") +
+  xlab("Age group") +
+  ylab("Proportion of individuals") +
+  ggtitle("Ancestry proportions across age-stratified groups")
+ggsave("age_stratified_gwas_ancestry_distribution.png", device="png", path=out_dir)
+```
+
+Supplementary Figure 5C: Miami plot of TOPMed pooled GWAS and the same GWAS with an age x genotype interaction term
+```{r}
+library(data.table)
+library(qqman)
+
+#read in GxE results
+gxe<-fread(paste(dep_dir, "snpxage_042020.txt.gz", sep=""))
+#for the manhattan() command "chr" needs to be numeric
+gxe$chr<-gsub("X", 23, gxe$chr)
+gxe$chr<-as.numeric(gxe$chr)
+#exclude snps that don't pass QC
+qc<-fread(paste(dep_dir, "snpIDsToDrop_combined_unique_20200515.txt", sep=""), header=F)
+gxe<-subset(gxe, !(gxe$snpID %in% qc$V1))
+
+#read in TOPMed pooled results (p-values < 0.01)
+full<-fread(paste(dep_dir, "topmed_pooled_p0.01.txt", sep=""))
+colnames(full)<-c("variant.id", "chr", "pos", "allele.index", "n.obs", "freq", "MAC", "Score", "Score.SE", "Score.Stat", "Score.pval", "Est", "Est.SE", "PVE", "filt", "low_depth_rate", "ref", "alt", "snpID")
+#for the manhattan() command "chr" needs to be numeric
+full$chr<-gsub("X", 23, full$chr)
+full$chr<-as.numeric(full$chr)
+#exclude snps that don't pass QC
+qc<-fread(paste(dep_dir, "snpIDsToDrop_combined_unique_20200515.txt", sep=""), header=F)
+full<-subset(full, !(full$snpID %in% qc$V1))
+
+png(paste(out_dir, "topmed_gxa_miami_plot.png", sep=""), height=10, width=20, units="in", res=300)
+par(mfrow=c(2,1)) #divide the frame into a grid of c(rows,columns)
+par(mar=c(0,5,3,3)) #set margins around the plot (bottom, left, top, right)
+manhattan(full, ylim=c(0,100), chr="chr", bp="pos", p="Score.pval", snp="snpID", cex=2.2, cex.lab=2.5, font.lab=2, font.axis=2, cex.axis=1.6, las=2, font=4)
+par(mar=c(5,5,3,3))
+manhattan(gxe, ylim=c(15,0), chr="chr", bp="pos", p="GxE.pval", snp="snpID", cex=2.2, cex.lab=2.5, font.lab=2, font.axis=2, cex.axis=1.6, las=2,font=4, xlab="", xaxt="n")
+dev.off()
+```
+
+Supplementary Figure 5D: Scatterplot comparing variants that are lead SNPs at suggestive signals (p<5e-5) in either the TOPMed pooled GWAS or the GWAS with an age by genotype interaction term.
+```{r}
+library(data.table)
+library(ggplot2)
+
+#Identify SNPs that are lead SNPs at minimally suggestive peaks in either dataset
+
+#read in TOPMed pooled GWAS results
+full<-fread(paste(dep_dir, "topmed_pooled_p0.01.txt", sep=""))
+colnames(full)<-c("variant.id", "chr", "pos", "allele.index", "n.obs", "freq", "MAC", "Score", "Score.SE", "Score.Stat", "Score.pval", "Est", "Est.SE", "PVE", "filt", "low_depth_rate", "ref", "alt", "snpID")
+full_sugg<-full[full$Score.pval < 5e-5,]
+full_sugg<-full_sugg[order(full_sugg$Score.pval),]
+full_sugg$pos<-as.numeric(full_sugg$pos)
+
+data<-full_sugg
+for(i in data$variant.id){
+ loc=which(data$variant.id==i)
+ c=data$chr[loc]
+ p=as.numeric(data$pos[loc])
+ data1<-subset(data$variant.id, data$chr==c & data$pos>(p-1000000) & data$pos<(p+1000000))
+ data1<-data1[-1]
+ data<-subset(data, !(data$variant.id %in% data1))
+}
+full_sugg<-data
+
+#read in GWAS with age x genotype interaction term results
+gxe<-fread(paste(dep_dir, "snpxage_042020.txt.gz", sep=""))
+gxe_sugg<-gxe[gxe$GxE.pval < 5e-5,]
+gxe_sugg<-gxe_sugg[order(gxe_sugg$GxE.pval),]
+gxe_sugg$pos<-as.numeric(gxe_sugg$pos)
+
+data<-gxe_sugg
+for(i in data$variant.id){
+ loc=which(data$variant.id==i)
+ c=data$chr[loc]
+ p=as.numeric(data$pos[loc])
+ data1<-subset(data$variant.id, data$chr==c & data$pos>(p-1000000) & data$pos<(p+1000000))
+ data1<-data1[-1]
+ data<-subset(data, !(data$variant.id %in% data1))
+}
+gxe_sugg<-data
+
+#create a unified list of snpIDs that are suggestive in either dataset
+full_sugg<-full_sugg[,19]
+gxe_sugg<-gxe_sugg[,18]
+data<-rbind(full_sugg, gxe_sugg)
+fwrite(data, "/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/publication/nat_comm_resubmission/supporting_files/gxe_gwas_sugg_snps.txt", col.names=F)
+
+#use linux to grep each SNP in each dataset outside of this script
+#read in grep output files
+f<-fread(paste(dep_dir, "gxe_gwas_sugg_snps_fullout.txt", sep=""))
+colnames(f)<-c("variant.id", "chr", "pos", "allele.index", "n.obs", "freq", "MAC", "Score", "Score.SE", "Score.Stat", "Score.pval", "Est", "Est.SE", "PVE", "filt", "low_depth_rate", "ref", "alt", "snpID")
+g<-fread(paste(dep_dir, "gxe_gwas_sugg_snps_gxeout.txt", sep=""))
+colnames(g)<-c("variant.id", "chr", "pos", "allele.index", "n.obs", "freq", "MAC", "Est.G", "Est.G:age_at_dna_blood_draw_wgs", "SE.G", "SE.G:age_at_dna_blood_draw_wgs", "GxE.Stat", "Joint.Stat", "GxE.pval", "Joint.pval", "ref", "alt", "snpID")
+#reduce tables to snpID, full pvalue, and gxe pvalue
+f<-f[,c(11,19)]
+g<-g[,c(14,18)]
+#bring it together
+df<-merge(f, g, by="snpID")
+
+
+#create a scatterplot comparing the p-values in each dataset for these lead SNPs
+
+#identify variants that are above suggestive in both datasets
+interest<-subset(df, -log10(df$Score.pval) > 5 & -log10(df$GxE.pval) > 5)
+
+#create objects for each SNP for plotting
+g1<-subset(df, df$snpID=="14:95716662:G:A")
+g1$rsid<-"rs8012195"
+g2<-subset(df, df$snpID=="11:58531017:G:A")
+g2$rsid<-"rs2515349"
+g3<-subset(df, df$snpID=="X:66043980:C:T")
+g3$rsid<-"rs585168"
+
+ggplot(df, aes(x=-log10(Score.pval), y=-log10(GxE.pval))) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=-log10(Score.pval), y=-log10(GxE.pval)), shape=21, fill="red", size=3) +
+  geom_point(data=g2, aes(x=-log10(Score.pval), y=-log10(GxE.pval)), shape=21, fill="green3", size=3) +
+  geom_point(data=g3, aes(x=-log10(Score.pval), y=-log10(GxE.pval)), shape=21, fill="blue", size=3) +
+  xlab("-log10(p-value) in TOPMed pooled GWAS") +
+  ylab("-log10(GxE p-value) in GWAS with Age interaction term") + 
+  ggtitle("Association strength of lead SNPs at suggestive peaks in either GWAS")
+ggsave("gxe_v_topmedgwas_sugg_snp.png", device="png", path=out_dir, width=6.69, height=6.69, units="in")
+```
+
+Supplementary Figure 5E: Manhattan plots for the signal led by rs2515349 in each GWAS
+```{r}
+library(data.table)
+library(ggplot2)
+
+#GxE GWAS Manhattan plot
+gxe<-fread(paste(dep_dir, "11_58531017_gxe.csv", sep=""))
+full_snp<-subset(gxe$snpID, gxe$GxE.pval == min(gxe$GxE.pval))
+g1<-subset(gxe, gxe$snpID==full_snp)
+ggplot(gxe, aes(x=as.numeric(pos), y=-log10(GxE.pval), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(GxE.pval)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(GxE pvalue)") +
+  ggtitle("GxE GWAS signal led by rs2515349") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs2515349_gxe.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+
+#TOPMed pooled GWAS Manhattan plot
+top<-fread(paste(dep_dir, "11_58531017_topmed_pooled.csv", sep=""))
+g1<-subset(top, top$snpID==full_snp)
+ggplot(top, aes(x=as.numeric(pos), y=-log10(Score.pval), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(Score.pval)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(pvalue)") +
+  ggtitle("TOPMed Pooled GWAS signal led by rs2515349") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs2515349_topmed.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+
+#Meta-analysis Manhattan plot
+meta<-fread(paste(dep_dir, "11_58531017_meta.csv", sep=""))
+g1<-subset(meta, meta$snpID==full_snp)
+ggplot(meta, aes(x=as.numeric(pos), y=-log10(pvalue), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(pvalue)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(pvalue)") +
+  ggtitle("Meta-analysis signal around rs2515349") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs2515349_meta.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+```
+
+Supplementary Figure 5F: Manhattan plots of signal led by rs585168
+```{r}
+library(data.table)
+library(ggplot2)
+
+#GxE GWAS Manhattan plot
+gxe<-fread(paste(dep_dir, "X_66043980_gxe.csv", sep=""))
+full_snp<-subset(gxe$snpID, gxe$GxE.pval == min(gxe$GxE.pval))
+g1<-subset(gxe, gxe$snpID==full_snp)
+ggplot(gxe, aes(x=as.numeric(pos), y=-log10(GxE.pval), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(GxE.pval)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(GxE pvalue)") +
+  ggtitle("GxE GWAS signal led by rs585168") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs585168_gxe.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+
+#TOPMed pooled GWAS Manhattan plot
+top<-fread(paste(dep_dir, "X_66043980_topmed_pooled.csv", sep=""))
+g1<-subset(top, top$snpID==full_snp)
+ggplot(top, aes(x=as.numeric(pos), y=-log10(Score.pval), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(Score.pval)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(pvalue)") +
+  ggtitle("TOPMed Pooled GWAS signal led by rs585168") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs585168_topmed.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+
+#Meta-analysis Manhattan plot
+meta<-fread(paste(dep_dir, "X_66043980_meta.csv", sep=""))
+g1<-subset(meta, meta$snpID==full_snp)
+ggplot(meta, aes(x=as.numeric(pos), y=-log10(pvalue), color=R2)) + 
+  geom_point() +
+  geom_point(data=g1, aes(x=as.numeric(pos), y=-log10(pvalue)), inherit.aes=F, shape=23, fill="black", size=3) +
+  xlab("Position on Chromosome") +
+  ylab("-log10(pvalue)") +
+  ggtitle("Meta-analysis signal around rs585168") +
+  scale_color_gradientn(colours = rainbow(5))
+ggsave("rs585168_meta.png", device="png", path=out_dir, width=6.99, height=4.62, units="in")
+```
+Supplementary Figure 5G: Forest plot of rs585168 effect size estimates across age-stratified GWAS
+```{r}
+library(data.table)
+library(ggplot2)
+
+#create a df that has just the SNP of interest for each group
+#add a column for each age strata for an index (1-3) and group (young, middle, eldest)
+
+one<-fread(paste(dep_dir, "age_split3_young_xchr.csv", sep=""))
+one<-subset(one, one$snpID=="X:66043980:C:T")
+one$index<-1
+one$group<-"Youngest [0,43]"
+middle<-fread(paste(dep_dir, "age_split3_middle_xchr.csv", sep=""))
+middle<-subset(middle, middle$snpID=="X:66043980:C:T")
+middle$index<-2
+middle$group<-"Middle (43,61]"
+eldest<-fread(paste(dep_dir, "age_split3_eldest_xchr.csv", sep=""))
+eldest<-subset(eldest, eldest$snpID=="X:66043980:C:T")
+eldest$index<-3
+eldest$group<-"Eldest (61,98]"
+
+df<-do.call(rbind, list(one,middle,eldest))
+
+#calculate bounds of beta CI
+df$beta<-df$Score/(df$Score.SE^2)
+df$se<-1/df$Score.SE
+df$CI_lower<-df$beta - (1.96*df$se)
+df$CI_upper<-df$beta + (1.96*df$se)
+
+#plot
+ggplot(df, aes(y=index, x=beta, xmin=CI_lower, xmax=CI_upper)) +
+    geom_point(aes(size=se)) +
+    geom_errorbar() +
+    scale_x_continuous(name="Effect size estimate with 95% CI") +
+    scale_y_continuous(name="", breaks=1:3, labels=df$group, trans="reverse") +
+    geom_vline(xintercept=0, color="black", alpha=0.5, linetype="dashed") +
+    ggtitle("rs585168 effect size across age groups") +
+    theme(legend.position = "none", text=element_text(size=16))
+ggsave("rs585168_agegroup_forest.png", device="png", path=out_dir, width=7.77, height=6.12, units="in")
+```
+
+Figure 5B-C: S-LDSC results plots
+```{r}
+library(data.table)
+library(ggplot2)
+
+#use a supplementary table from Finucane 2018 to get cell types and categories
+fin<-fread(paste(dep_dir, "finucane_2018_supp_table7.csv", sep=""))
+yes<-subset(fin, fin$entex=="Yes")
+yes$Name<-paste(yes$tissue, "_ENTEX__", yes$mark, sep="")
+no<-subset(fin, fin$entex=="No")
+no$Name<-paste(no$tissue, no$mark, sep="__")
+fin<-rbind(yes, no)
+
+#read in LDSC results using chromatin marks
+meta<-fread(paste(dep_dir,"gwama_euro_screen_Multi_tissue_chromatin.cell_type_results.txt", sep=""))
+
+data<-merge(meta, fin, by="Name")
+data$Name<-factor(data$Name, levels=data[order(category),]$Name)
+
+ggplot(data, aes(x=category, y=-log10(Coefficient_P_value), color=category)) +
+  geom_point() +
+  ggtitle("Cell type enrichment for European meta-analysis by chromatin data") +
+  ylab("-log10(pvalue)") +
+  xlab("") +
+  geom_hline(yintercept=2.85, color="grey60", linetype="dashed") +
+  geom_text(data=subset(data, -log10(data$Coefficient_P_value) > 2.85), aes(x=category, y=-log10(Coefficient_P_value), color=category, label=Name)) +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1), legend.position = "none")
+ggsave("ldsc_chromatin.png", path=out_dir, type="png")
+
+#read in LDSC results using expression data
+meta<-fread(paste(dep_dir, "gwama_euro_Multi_tissue_gene_expr.cell_type_results.txt", sep=""))
+
+#use Finucane 2018 Supplemental Table 6 to get categories
+fin<-fread(paste(dep_dir, "finucane_2018_supptab6_categories.csv", sep=""))
+colnames(fin)[1]<-"Name"
+
+data<-merge(meta, fin, by="Name")
+data$Name<-factor(data$Name, levels=data[order(category),]$Name)
+
+ggplot(data, aes(x=category, y=-log10(Coefficient_P_value), color=category)) +
+  geom_point() +
+  ggtitle("Cell type enrichment for European meta-analysis by expression data") +
+  ylab("-log10(pvalue)") +
+  xlab("") +
+  geom_hline(yintercept=2.85, color="grey60", linetype="dashed") +
+  geom_text(data=subset(data, -log10(data$Coefficient_P_value) > 2.85), aes(x=category, y=-log10(Coefficient_P_value), color=category, label=Name)) +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1), legend.position = "none")
+ggsave("ldsc_expression.png", path=out_dir, type="png")
+```
+
+Supplementary Figure 6A: Heatmap showing cell tyep with most enrichment for each chromatin state
+```{r}
+library(data.table)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+data<-fread(paste(dep_dir, "metapvalue_heatmap_binary.txt", sep=""))
+data2<-data %>% pivot_longer(cols=c("Adipose", "Blood & T-cell", "Brain", "Digestive", "Epithelial", "ES-deriv", "ESC", "Heart", "HSC & B-cell", "IMR90", "iPSC", "Mesench", "Muscle", "Myosat", "Neurosph", "Other", "Sm. Muscle", "Thymus"), 
+                             names_to="Cell_type",
+                             values_to="max_enrichment")
+#make max_enrichment a discrete scale
+data2$enriched<-cut(data2$max_enrichment, breaks=c(-1,0,1), include.lowest = T)
+
+#set order of cell types, order by number of chromatin states where the cell type is max
+celltype<-vector()
+count<-vector()
+i<-0
+for (cell in c("Adipose", "Blood & T-cell", "Brain", "Digestive", "Epithelial", "ES-deriv", "ESC", "Heart", "HSC & B-cell", "IMR90", "iPSC", "Mesench", "Muscle", "Myosat", "Neurosph", "Other", "Sm. Muscle", "Thymus")){
+  i<-i+1
+  df<-subset(data2, data2$Cell_type==cell)
+  celltype[i]<-cell
+  count[i]<-sum(df$max_enrichment)
+}
+df<-data.frame(celltype, count)
+df<-df[order(df$count),]
+#note this orders it from min to max
+#but that creates the y-axis we want later
+data2$Cell_type<-factor(data2$Cell_type, levels = df$celltype)
+
+#order the chromatin states by state number
+#this groups them by similar states
+data2<-as.data.table(data2)
+data2[,c("state_num", "state_interpretation"):=tstrsplit(ChromatinState, "_", fixed=T)]
+data2$state_num<-as.numeric(data2$state_num)
+data2<-data2[order(data2$state_num),]
+df<-unique(data2[,c(1,5)])
+df<-df[order(df$state_num),]
+data2$ChromatinState<-factor(data2$ChromatinState, levels=df$ChromatinState)
+
+png(paste(out_dir, "chromatin_enrichment_max.png", sep=""), height=6, width=8, units="in", res=100)
+ggplot(data2, aes(x=ChromatinState, y=Cell_type, fill=enriched)) +
+  geom_tile(color="white",
+            lwd = 0.5,
+            linetype = 1) +
+  labs(title="Cell type with the strongest enrichment for each chromatin state",
+       x="Chromatin State",
+       y="Cell type") +
+  scale_fill_manual(values=c("grey70", "royalblue")) +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1), legend.position = "none")
+dev.off()
+```
+Figure 6B: plot showing quantification of telomere length from Southern blot for KBTBD6 overexpression
+```{r}
+library(data.table)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+
+#read in file with median telomere lengths for each data point
+tl<-fread(paste(dep_dir, "southern_imagequant_summary.csv", sep=""))
+tl$stat<-rep("median", nrow(tl))
+
+#read in file with estimated min, max, and median for each data point
+m<-fread(paste(dep_dir, "southern_minmax.csv", sep=""))
+#adjust data frame structure
+minimum<-m[,c(1,3,4,5,7)]
+minimum$stat<-rep("min", nrow(minimum))
+colnames(minimum)[1]<-"kb"
+maximum<-m[,c(2:5,7)]
+maximum$stat<-rep("max", nrow(maximum))
+colnames(maximum)[1]<-"kb"
+
+#combine all stat values into one data frame
+data<-do.call("rbind", list(tl, minimum, maximum))
+data$id<-paste(data$gene, data$clone, data$timepoint, sep="_")
+
+#we're only going to make these plots for the KBTBD6 and POP5 main Southerns
+data<-subset(data, data$southern %in% c("kbtbd6", "pop5"))
+
+#we want to be clear about where the numbers are coming from. Create a graphic for this
+df<-data.frame(x=c("10","9","8","7","6.5","6","5.8","5.6","5.5","5.4","5.2","5","4.5","4","3.5","3", "2.5", "2", "1", "0.5"), y=c(0,0,0.25,1,2.5,3,3.4,3.9,4,3.9,3.7,3.5,3,2,1.5,1,0.5,0.3,0,0))
+df$x<-factor(df$x, levels=c("10","9","8","7","6.5","6","5.8","5.6","5.5","5.4","5.2","5","4.5","4","3.5","3", "2.5", "2", "1", "0.5"))
+key<-ggplot(df, aes(x=x,y=y, group=1)) + 
+  geom_line(linewidth=0.5) +
+  geom_vline(xintercept = 2, color="brown3", linewidth=1) +
+  geom_vline(xintercept = 9, color="darkorange", linewidth=1) +
+  geom_vline(xintercept = 19, color="purple4", linewidth=1) +
+  xlab("Telomere length") +
+  theme(axis.text.y=element_blank(),axis.ticks.y=element_blank(), 
+        axis.text.x=element_blank(), axis.ticks.x=element_blank(), 
+        panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background = element_blank(), 
+        axis.line = element_line(color="black"), 
+        text=element_text(size=5), 
+        plot.background=(element_rect(color="black", fill="white", linewidth=1))) +
+  ylab("Density")
+
+
+data2<-subset(data, data$southern=="kbtbd6")
+
+#note, add triangles manually in powerpoint
+#originally I coded these in, but had trouble with the log scale differentially compressing them
+ggplot(data2, aes(x=id, y=kb, color=stat)) + 
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.grid.major.y=element_line(size=0.1, color="black"), panel.background = element_blank(), axis.line=element_line(color="black")) +
+  scale_y_continuous(trans='log10', limits=c(1.5,11), breaks=c(2:11)) +
+  ggtitle("KBTBD6 Southern") +
+  ylab("log10(Telomere Length Estimate)") +
+  xlab("") +
+  geom_segment(aes(x=0.75, xend=0.75, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=1.25, xend=1.25, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=0.75, xend=1.25, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=1.75, xend=1.75, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=2.25, xend=2.25, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=1.75, xend=2.25, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=2.75, xend=2.75, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=3.25, xend=3.25, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=2.75, xend=3.25, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=3.75, xend=3.75, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=4.25, xend=4.25, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=3.75, xend=4.25, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=4.75, xend=4.75, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=5.25, xend=5.25, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=4.75, xend=5.25, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=5.75, xend=5.75, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=6.25, xend=6.25, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=5.75, xend=6.25, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=6.75, xend=6.75, y=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=7.25, xend=7.25, y=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=6.75, xend=7.25, y=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_5_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=7.75, xend=7.75, y=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=8.25, xend=8.25, y=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=7.75, xend=8.25, y=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_5_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=8.75, xend=8.75, y=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=9.25, xend=9.25, y=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=8.75, xend=9.25, y=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_5_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=9.75, xend=9.75, y=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=10.25, xend=10.25, y=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=9.75, xend=10.25, y=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_7_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=10.75, xend=10.75, y=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=11.25, xend=11.25, y=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=10.75, xend=11.25, y=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_7_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=11.75, xend=11.75, y=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=12.25, xend=12.25, y=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=11.75, xend=12.25, y=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="KBTBD6_7_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  inset_element(key,left=0,right=0.25,top=0.25,bottom=0)
+ggsave(paste(out_dir, "kbtbd6_southern_log_notriangle.png", sep=""), device="png", units = "in", height=4.5, width=4.5)
+```
+Figure 6D: plot showing quantification of telomere length from Southern blot for POP5 overexpression
+```{r}
+library(data.table)
+library(ggplot2)
+library(patchwork)
+library(ggrepel)
+
+tl<-fread("/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/wetlab_paper_data/southern_imagequant_summary.csv")
+tl$stat<-rep("median", nrow(tl))
+
+#try using the min, max, and median to create horizontal lines at each value for each timepoint
+m<-fread("/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/wetlab_paper_data/southern_minmax.csv")
+
+#adjust data frame structure
+minimum<-m[,c(1,3,4,5,7)]
+minimum$stat<-rep("min", nrow(minimum))
+colnames(minimum)[1]<-"kb"
+maximum<-m[,c(2:5,7)]
+maximum$stat<-rep("max", nrow(maximum))
+colnames(maximum)[1]<-"kb"
+
+#combine all stat values into one data frame
+data<-do.call("rbind", list(tl, minimum, maximum))
+data$id<-paste(data$gene, data$clone, data$timepoint, sep="_")
+
+#we're only going to make these plots for the KBTBD6 and POP5 main Southerns
+data<-subset(data, data$southern %in% c("kbtbd6", "pop5"))
+
+#we want to be clear about where the numbers are coming from. Create a graphic for this
+df<-data.frame(x=c("10","9","8","7","6.5","6","5.8","5.6","5.5","5.4","5.2","5","4.5","4","3.5","3", "2.5", "2", "1", "0.5"), y=c(0,0,0.25,1,2.5,3,3.4,3.9,4,3.9,3.7,3.5,3,2,1.5,1,0.5,0.3,0,0))
+df$x<-factor(df$x, levels=c("10","9","8","7","6.5","6","5.8","5.6","5.5","5.4","5.2","5","4.5","4","3.5","3", "2.5", "2", "1", "0.5"))
+key<-ggplot(df, aes(x=x,y=y, group=1)) + 
+  geom_line(size=0.5) +
+  geom_vline(xintercept = 2, color="brown3", size=1) +
+  geom_vline(xintercept = 9, color="darkorange", size=1) +
+  geom_vline(xintercept = 19, color="purple4", size=1) +
+  xlab("Telomere length") +
+  theme(axis.text.y=element_blank(),axis.ticks.y=element_blank(), 
+        axis.text.x=element_blank(), axis.ticks.x=element_blank(), 
+        panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background = element_blank(), 
+        axis.line = element_line(color="black"), 
+        text=element_text(size=5), 
+        plot.background=(element_rect(color="black", fill="white", size=1))) +
+  ylab("Density")
+
+data2<-subset(data, data$southern=="pop5")
+
+#note, add triangles manually in powerpoint
+#originally I coded these in, but had trouble with the log scale differentially compressing them
+ggplot(data2, aes(x=id, y=kb, color=stat)) + 
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.grid.major.y=element_line(size=0.1, color="black"), panel.background = element_blank(), axis.line=element_line(color="black")) +
+  scale_y_continuous(trans='log10', limits=c(1,11), breaks=c(1:11)) +
+  ggtitle("POP5 Southern") +
+  ylab("log10(Telomere Length Estimate)") +
+  xlab("") +
+  geom_segment(aes(x=0.75, xend=0.75, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=1.25, xend=1.25, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=0.75, xend=1.25, y=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=1.75, xend=1.75, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=2.25, xend=2.25, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=1.75, xend=2.25, y=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=2.75, xend=2.75, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=3.25, xend=3.25, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=2.75, xend=3.25, y=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_5_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=3.75, xend=3.75, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=4.25, xend=4.25, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=3.75, xend=4.25, y=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=4.75, xend=4.75, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=5.25, xend=5.25, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=4.75, xend=5.25, y=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=5.75, xend=5.75, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=6.25, xend=6.25, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=5.75, xend=6.25, y=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="GFP_6_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=6.75, xend=6.75, y=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=7.25, xend=7.25, y=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=6.75, xend=7.25, y=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_5_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=7.75, xend=7.75, y=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=8.25, xend=8.25, y=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=7.75, xend=8.25, y=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_5_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=8.75, xend=8.75, y=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=9.25, xend=9.25, y=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=8.75, xend=9.25, y=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_5_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=9.75, xend=9.75, y=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=10.25, xend=10.25, y=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=9.75, xend=10.25, y=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_6_1" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=10.75, xend=10.75, y=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=11.25, xend=11.25, y=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=10.75, xend=11.25, y=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_6_2" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  geom_segment(aes(x=11.75, xend=11.75, y=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=12.25, xend=12.25, y=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="min"), yend=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="max")), linewidth=0.5, color="grey70") +
+  geom_segment(aes(x=11.75, xend=12.25, y=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="median"), yend=subset(data2$kb, data2$id=="POP5_6_3" & data2$stat=="median")), linewidth=2, color="darkorange") +
+  
+  inset_element(key,left=0,right=0.25,top=0.25,bottom=0)
+ggsave(paste(out_dir, "pop5_southern_log10_notriangle.png", sep=""), device="png", units = "in", height=4.5, width=4.5)
+```
+
+Figure 7A: POP5 expression in CRISPR clones
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "qc_pass_results.csv", sep=""))
+
+data1<-subset(data, !is.na(data$cq_mean_ACTB))
+data1<-subset(data1, !is.na(data1$cq_mean_POP5))
+
+#average Ct approach
+
+#calculate control average Ct of houskeeping gene (ACTB) in the control samples 
+hkg<-subset(data1$cq_mean_ACTB, data1$Experiment %in% c("KBTBD6 knock in", "KBTBD6 knock out"))
+actb_con<-mean(hkg)
+
+#calculate control average Ct of gene of interest (POP5) in the control samples
+m<-subset(data1$cq_mean_POP5, data1$Experiment %in% c("KBTBD6 knock in", "KBTBD6 knock out"))
+pop5_con<-mean(m)
+
+#calculate delta Ct values: control average - sample average
+data1$delta_hkg<-actb_con-data1$cq_mean_ACTB
+data1$delta_goi<-pop5_con-data1$cq_mean_POP5
+
+#calculate ratio
+data1$ratio<-1.8000^data1$delta_goi/1.9049^data1$delta_hkg
+
+#force the POP5 knockout to be on the left
+data1$Experiment<-factor(data1$Experiment, levels=c("POP5 knock out", "KBTBD6 knock out"))
+
+ggplot(data1, aes(Experiment, ratio)) + geom_boxplot() + geom_point() + ggtitle("") + ylab("delta Ct") + ylim(0,3) +xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+ggsave("pop5_qpcr.png", path=out_dir, device="png", units="in", width=1.5, height=1.75)
+
+t.test(subset(data1$ratio, data1$Experiment %in% c("KBTBD6 knock out")), subset(data1$ratio, data1$Experiment=="POP5 knock out"), alternative="greater")
+```
+
+Figure 7B: KBTBD6/KBTBD7 99% credible set Manhattan plot
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "kbtb6_susie_manplot.txt", sep=""))
+
+credset<-fread(paste(dep_dir, "13_41150640_new_credset_0.99credset.txt", sep=""))
+c1<-subset(credset, credset$cs_num==1)
+c1<-subset(data, data$snpID %in% c1$snpID)
+c2<-subset(credset, credset$cs_num==2)
+c2<-subset(data, data$snpID %in% c2$snpID)
+
+ggplot(data, aes(pos, -log10(pvalue), color=r2)) + 
+  geom_point() +
+  scale_color_gradientn(colours = rainbow(5)) +
+  geom_point(data=c1, aes(pos, -log10(pvalue)), inherit.aes=F, shape=23, color="black", size=3, stroke=1) +
+  geom_point(data=c2, aes(pos, -log10(pvalue)), inherit.aes=F, shape=0, color="black", size=3, stroke=1) +
+  scale_x_continuous(name="Position on chromosome") +
+  ylab("-log10(P-value)") +
+  ggtitle("SuSiE 99% credible set for signal led by rs1411041")
+ggsave("kbtbd6_0.99credset_manplot.png", device="png", path=out_dir, width=6, height=4, units="in")
+```
+
+Figure 7E: KBTBD6 expression in CRISPR clones
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "qc_pass_results.csv", sep=""))
+
+data1<-subset(data, !is.na(data$cq_mean_ACTB))
+data1<-subset(data1, !is.na(data1$cq_mean_KBTBD6))
+
+#average Ct approach
+
+#calculate control average Ct of houskeeping gene (ACTB) in the control samples 
+hkg<-subset(data1$cq_mean_ACTB, data1$Experiment=="POP5 knock out")
+actb_con<-mean(hkg)
+
+#calculate control average Ct of gene of interest (KBTBD6) in the control samples
+m<-subset(data1$cq_mean_KBTBD6, data1$Experiment=="POP5 knock out")
+k6_con<-mean(m)
+
+#calculate delta Ct values: control average - sample average
+data1$delta_hkg<-actb_con-data1$cq_mean_ACTB
+data1$delta_goi<-k6_con-data1$cq_mean_KBTBD6
+
+#calculate ratio
+data1$ratio<-1.9826^data1$delta_goi/1.9049^data1$delta_hkg
+
+#exclude knockin sample
+data1<-subset(data1, !(data1$Experiment=="KBTBD6 knock in"))
+
+ggplot(data1, aes(Experiment, ratio)) + geom_boxplot() + geom_point() + ggtitle("") + ylab("delta Ct") + ylim(0,3) +xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+ggsave("kbtbd6_qpcr.png", path=out_dir, device="png", units="in", width=1.5, height=1.75)
+
+t.test(subset(data1$ratio, data1$Experiment %in% c("KBTBD6 knock out")), subset(data1$ratio, data1$Experiment=="POP5 knock out"), alternative="less")
+```
+
+Figure 7F: KBTBD7 expression in CRISPR clones
+```{r}
+library(data.table)
+library(ggplot2)
+
+data<-fread(paste(dep_dir, "qc_pass_results.csv", sep=""))
+
+data1<-subset(data, !is.na(data$cq_mean_ACTB))
+data1<-subset(data1, !is.na(data1$cq_mean_KBTBD7))
+
+#average Ct approach
+
+#calculate control average Ct of houskeeping gene (ACTB) in the control samples 
+hkg<-subset(data1$cq_mean_ACTB, data1$Experiment=="POP5 knock out")
+actb_con<-mean(hkg)
+
+#calculate control average Ct of gene of interest (KBTBD7) in the control samples
+m<-subset(data1$cq_mean_KBTBD7, data1$Experiment=="POP5 knock out")
+k7_con<-mean(m)
+
+#calculate delta Ct values: control average - sample average
+data1$delta_hkg<-actb_con-data1$cq_mean_ACTB
+data1$delta_goi<-k7_con-data1$cq_mean_KBTBD7
+
+#calculate ratio
+data1$ratio<-1.9179^data1$delta_goi/1.9049^data1$delta_hkg
+
+ggplot(data1, aes(Experiment, ratio)) + geom_boxplot() + geom_point() + ggtitle("") + ylab("delta Ct") + ylim(0,2) +xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+ggsave("kbtbd7_qpcr.png", path=out_dir, device="png", units="in", width=1.5, height=1.75)
+
+t.test(subset(data1$ratio, data1$Experiment %in% c("KBTBD6 knock out")), subset(data1$ratio, data1$Experiment=="POP5 knock out"), alternative="less")
+```
+
+Write session information to capture package versions
+```{r}
+writeLines(capture.output(sessionInfo()), "/Users/rebecca_keener/Documents/Telomere-GWAS-project/manuscript/Keener_meta-analysis_dataupload_202401/generating_figures/generating_figures.session") 
+```
+

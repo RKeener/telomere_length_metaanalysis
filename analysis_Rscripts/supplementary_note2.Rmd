@@ -1,0 +1,74 @@
+---
+title: "supplementary_note2"
+author: "Rebecca Keener"
+date: "2023-11-30"
+output: html_document
+---
+
+Supplementary Note 2
+
+Stage 1
+```{r}
+library(data.table)
+
+st2<-fread("/Users/rebecca_keener/Documents/Telomere-GWAS-project/meta-analysis/final/gtex_eqtl/coloc_results_table.csv")
+st2<-subset(st2, st2$PPH4 > 0.5)
+
+#some of these signals colocalized with the same gene in different tissues
+#get a list of unique signal - gene colocalization by keeping the strongest colocalization tissue for each gene
+i<-0
+for (signal in unique(st2$chrpos)){
+  df<-subset(st2, st2$chrpos==signal)
+  for (gene in unique(df$ensembl_gene_id)){
+    i<-i+1
+    df2<-subset(df, df$ensembl_gene_id==gene)
+    df2<-df2[df2$PPH4 == max(df2$PPH4),]
+    if(i==1){
+      data<-df2
+    }else{
+      data<-rbind(data, df2)
+    }
+  }
+}
+
+#number of genes
+length(unique(data$ensembl_gene_id))
+#number of signals
+length(unique(data$chrpos))
+```
+
+Stage 2
+From GTEx_v8 cis-eQTL data for each gene - tissue pair that colocalized with a meta-analysis signal with PPH4 > 0.5, query the meta-analysis lead SNP for the signal that colocalized as an eSNP for that gene and get the eQTL information.
+This file is provided as input for this, gtex_leadsnp.txt
+Note that in some cases there are multiple SNPs with the exact same minimum p-value, in these cases we evaluated whether the direction of effect (slope) was the same direction (+/-) or not, see below.
+```{r}
+library(data.table)
+#assumes earlier chunk has been run
+
+data$g_t_pair<-paste(data$ensembl_gene_id, data$tissue, sep="_")
+
+#examine lead meta-analysis SNP for each eQTL
+topsnp<-fread("/Users/rebecca_keener/Documents/Telomere-GWAS-project/meta-analysis/final/supplemental_note2/suppnote2_leadsnp_esnps.txt")
+
+#examine minimum p-value eSNP for each eQTL
+#topsnp<-fread("/Users/rebecca_keener/Documents/Telomere-GWAS-project/meta-analysis/final/supplemental_note2/suppnote2_top_esnps.txt")
+#note there are 82 unique genes with multiple top SNPs per gene
+
+#generate g_t_pair with the format: ensembl gene (no .version)_tissue
+topsnp[,c("gene", "version"):=tstrsplit(gene_id, ".", fixed=T)]
+topsnp$g_t_pair<-paste(topsnp$gene, topsnp$tissue, sep="_")
+topsnp<-topsnp[,c(2,6,7,8,14)]
+colnames(topsnp)<-c("top_esnp", "eqtl_maf", "eqtl_pvalue", "eqtl_beta", "g_t_pair")
+
+data2<-merge(data, topsnp, by="g_t_pair")
+
+#limit candidate genes to those with a positive direction of effect
+data3<-subset(data2, data2$eqtl_beta > 0)
+
+#number of unique genes that pass this filter
+length(unique(data3$ensembl_gene_id))
+#number of unique meta-analysis signals that pass this filter
+length(unique(data3$chrpos))
+
+fwrite(data3, "/Users/rebecca_keener/Documents/Telomere-GWAS-project/meta-analysis/final/supplemental_note2/stage2_pass_genes.csv", sep=",")
+```
